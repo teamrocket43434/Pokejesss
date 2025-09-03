@@ -1,13 +1,15 @@
 import os
 import discord
 import asyncio
+from discord.ext import commands
 from predict import Prediction
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Change from Client to Bot for cog support
 intents = discord.Intents.default()
 intents.message_content = True  # Required for reading message content
-bot = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix='m!', intents=intents)
 
 # Initialize predictor with error handling
 predictor = None
@@ -39,17 +41,44 @@ def format_pokemon_prediction(name, confidence):
         # Return normal format for Pokemon without gender variants
         return f"{name}: {confidence}"
 
+async def get_collectors_message(guild_id, pokemon_name):
+    """Get collectors message for a predicted Pokemon"""
+    try:
+        # Get the collection cog
+        cog = bot.get_cog('PokemonCollectionCog')
+        if not cog:
+            return ""
+        
+        collectors = await cog.get_collectors_for_pokemon(guild_id, pokemon_name)
+        if collectors:
+            mentions = [f"<@{user_id}>" for user_id in collectors]
+            return f"\nCollectors: {' '.join(mentions)}"
+        return ""
+    except Exception as e:
+        print(f"Error getting collectors: {e}")
+        return ""
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
     if predictor is None:
         await initialize_predictor()
+    
+    # Load the cog
+    try:
+        await bot.load_extension('commands')
+        print("Commands cog loaded successfully")
+    except Exception as e:
+        print(f"Failed to load commands cog: {e}")
 
 @bot.event
 async def on_message(message):
     # Don't respond to the bot's own messages
     if message.author == bot.user:
         return
+
+    # Process commands first
+    await bot.process_commands(message)
 
     # Check if predictor is available
     if predictor is None:
@@ -58,12 +87,12 @@ async def on_message(message):
         if predictor is None:
             return
 
-    # 1) Test command
+    # 1) Test command (keeping this as event-based for backwards compatibility)
     if message.content.lower() == "m!ping":
         await message.channel.send("Pong!")
         return
 
-    # 2) Manual predict command
+    # 2) Manual predict command (keeping this as event-based)
     if message.content.startswith("m!predict"):
         image_url = None
         
@@ -92,6 +121,12 @@ async def on_message(message):
         try:
             name, confidence = predictor.predict(image_url)
             formatted_output = format_pokemon_prediction(name, confidence)
+            
+            # Add collectors if any
+            if message.guild:
+                collectors_msg = await get_collectors_message(message.guild.id, name)
+                formatted_output += collectors_msg
+            
             await message.reply(formatted_output)
         except Exception as e:
             await message.reply(f"Error: {e}")
@@ -118,6 +153,12 @@ async def on_message(message):
                             confidence_value = float(confidence.rstrip('%'))
                             if confidence_value >= 70.0:  # Only show if confidence >= 70%
                                 formatted_output = format_pokemon_prediction(name, confidence)
+                                
+                                # Add collectors if any
+                                if message.guild:
+                                    collectors_msg = await get_collectors_message(message.guild.id, name)
+                                    formatted_output += collectors_msg
+                                
                                 await message.reply(formatted_output)
                             else:
                                 print(f"Low confidence prediction skipped: {name} ({confidence})")
@@ -148,6 +189,11 @@ async def get_image_url_from_message(message):
 def main():
     if not TOKEN:
         print("Error: DISCORD_TOKEN environment variable not set")
+        return
+    
+    mongodb_url = os.getenv("MONGODB_URL")
+    if not mongodb_url:
+        print("Error: MONGODB_URL environment variable not set")
         return
     
     try:
