@@ -24,7 +24,11 @@
   {
     "dex_number": 3,
     "name": "Venusaur",
-    "other_names": {},
+    "other_names": {
+    "🇯🇵": "Fushigibana",
+    "🇬🇧": "Venusaur",
+    "🇩🇪": "Bisaflor",
+    "🇫🇷": "Florizarre"},
     "is_variant": false
   },
   {
@@ -12150,7 +12154,7 @@
       "🇫🇷": "Meltan"
     },
     "is_variant": false,
-    "rarity": "rare"
+   � "rarity": "rare"
   },
   {
     "dex_number": 809,
@@ -12572,7 +12576,7 @@
     "name": "Applin",
     "other_names": {
       "🇯🇵": "Kajitchu",
-      "🇬🇧": "Applin",
+      "🇬🇧"�: "Applin",
       "🇩🇪": "Knapfel",
       "🇫🇷": "Verpom"
     },
@@ -12979,7 +12983,7 @@
   },
   {
     "dex_number": 867,
-    "name": "Runerigus",
+    "name": "Runeri�gus",
     "other_names": {
       "🇯🇵": "Desubān",
       "🇬🇧": "Runerigus",
@@ -13384,7 +13388,7 @@
     "is_variant": false,
     "rarity": "rare"
   },
-  {
+  {�
     "dex_number": 892,
     "name": "Urshifu",
     "other_names": {
@@ -13798,7 +13802,7 @@
   {
     "dex_number": 921,
     "name": "Pawmi",
-    "other_names": {
+    "other_na�mes": {
       "🇯🇵": "Pamo",
       "🇬🇧": "Pawmi",
       "🇩🇪": "Pamo",
@@ -14218,7 +14222,7 @@
       "🇩🇪": "Flattutu",
       "🇫🇷": "Flotillon"
     },
-    "is_variant": false
+    "is_varia�nt": false
   },
   {
     "dex_number": 956,
@@ -14635,7 +14639,7 @@
     "name": "Slither Wing",
     "other_names": {
       "🇯🇵": "Chiohauhane",
-      "🇬🇧": "Slither Wing",
+      "🇬🇧": "Slither� Wing",
       "🇩🇪": "Kriechflügel",
       "🇫🇷": "Rampe-Ailes"
     },
@@ -15043,7 +15047,7 @@
     "rarity": "rare"
   },
   {
-    "dex_number": 1018,
+    "dex_number"�: 1018,
     "name": "Archaludon",
     "other_names": {
       "🇯🇵": "Briduras",
