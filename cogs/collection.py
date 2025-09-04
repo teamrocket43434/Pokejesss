@@ -4,6 +4,7 @@ from discord.ext import commands
 from utils import (
     load_pokemon_data, 
     find_pokemon_by_name, 
+    find_pokemon_by_name_flexible,
     normalize_pokemon_name
 )
 
@@ -217,7 +218,7 @@ class Collection(commands.Cog):
             return False
 
     async def add_pokemon_to_collection(self, user_id, guild_id, pokemon_names):
-        """Add Pokemon to user's collection"""
+        """Add Pokemon to user's collection with accent-insensitive matching"""
         if self.db is None:
             return "Database not available"
 
@@ -239,11 +240,11 @@ class Collection(commands.Cog):
             if not name:
                 continue
 
-            pokemon = find_pokemon_by_name(name, pokemon_data)
+            # Use flexible matching that handles accents
+            pokemon = find_pokemon_by_name_flexible(name, pokemon_data)
 
             if pokemon and pokemon.get('name'):
-                # If it's a base form, add the main name
-                # If it's a variant, add the variant name
+                # Always add the official name (with proper accents/capitalization)
                 added_pokemon.append(pokemon['name'])
             else:
                 invalid_pokemon.append(name)
@@ -283,7 +284,7 @@ class Collection(commands.Cog):
             return f"Database error: {str(e)[:100]}"
 
     async def remove_pokemon_from_collection(self, user_id, guild_id, pokemon_names):
-        """Remove Pokemon from user's collection"""
+        """Remove Pokemon from user's collection with accent-insensitive matching"""
         if self.db is None:
             return "Database not available"
 
@@ -305,9 +306,11 @@ class Collection(commands.Cog):
             if not name:
                 continue
 
-            pokemon = find_pokemon_by_name(name, pokemon_data)
+            # Use flexible matching that handles accents
+            pokemon = find_pokemon_by_name_flexible(name, pokemon_data)
 
             if pokemon and pokemon.get('name'):
+                # Always use the official name for removal
                 removed_pokemon.append(pokemon['name'])
             else:
                 not_found_pokemon.append(name)
