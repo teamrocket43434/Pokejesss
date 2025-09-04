@@ -9,3 +9,4 @@ tqdm
 requests
 onnxruntime
 pymongo
+motor
