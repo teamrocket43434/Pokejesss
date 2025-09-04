@@ -34,10 +34,10 @@ async def initialize_database():
         if not MONGODB_URI:
             print("Warning: MONGODB_URI not set, collection features disabled")
             return
-        
+
         print(f"Attempting to connect to MongoDB...")
         print(f"URI starts with: {MONGODB_URI[:30]}...")  # Show more characters but keep secure
-        
+
         # Try different TLS configurations for Railway compatibility
         tls_configs = [
             # Config 1: Standard connection (let MongoDB handle TLS automatically)
@@ -66,34 +66,34 @@ async def initialize_database():
                 "maxPoolSize": 1
             }
         ]
-        
+
         for i, config in enumerate(tls_configs, 1):
             try:
                 print(f"Trying TLS configuration {i}: {list(config.keys())}")
                 db_client = AsyncIOMotorClient(MONGODB_URI, **config)
-                
+
                 # Test the connection with shorter timeout
                 print("Testing connection with ping...")
                 await asyncio.wait_for(db_client.admin.command('ping'), timeout=5)
-                
+
                 db = db_client.pokemon_collector
                 print(f"✅ Database initialized successfully with configuration {i}")
                 print(f"Database object created: {db is not None}")
                 return
-                
+
             except asyncio.TimeoutError:
                 print(f"❌ Config {i} failed: Connection timeout")
             except Exception as e:
                 print(f"❌ Config {i} failed: {str(e)[:100]}...")
-                
+
             # Clean up failed connection
             if 'db_client' in locals() and db_client:
                 db_client.close()
             db_client = None
             db = None
-        
+
         print("❌ All TLS configurations failed - database features will be disabled")
-        
+
     except Exception as e:
         print(f"❌ Critical error in database initialization: {e}")
         db_client = None
@@ -111,32 +111,37 @@ def load_pokemon_data():
 def find_pokemon_by_name(name, pokemon_data):
     """Find Pokemon by name (including other language names)"""
     name_lower = name.lower().strip()
-    
+
     for pokemon in pokemon_data:
         # Check main name
-        if pokemon['name'].lower() == name_lower:
+        if pokemon.get('name', '').lower() == name_lower:
             return pokemon
-        
-        # Check other language names
-        for lang_name in pokemon['other_names'].values():
-            if lang_name.lower() == name_lower:
-                return pokemon
-    
+
+        # Check other language names (only if the key exists and is not None)
+        other_names = pokemon.get('other_names')
+        if other_names and isinstance(other_names, dict):
+            for lang_name in other_names.values():
+                if lang_name and isinstance(lang_name, str) and lang_name.lower() == name_lower:
+                    return pokemon
+
     return None
 
 def get_pokemon_variants(base_pokemon_name, pokemon_data):
     """Get all variants of a Pokemon (including the base form)"""
     variants = []
     base_pokemon_name_lower = base_pokemon_name.lower()
-    
+
     for pokemon in pokemon_data:
+        pokemon_name = pokemon.get('name', '')
+
         # Add the base Pokemon itself
-        if pokemon['name'].lower() == base_pokemon_name_lower:
-            variants.append(pokemon['name'])
+        if pokemon_name.lower() == base_pokemon_name_lower:
+            variants.append(pokemon_name)
         # Add variants that belong to this base Pokemon
-        elif pokemon.get('is_variant') and pokemon.get('variant_of', '').lower() == base_pokemon_name_lower:
-            variants.append(pokemon['name'])
-    
+        elif (pokemon.get('is_variant') and 
+              pokemon.get('variant_of', '').lower() == base_pokemon_name_lower):
+            variants.append(pokemon_name)
+
     return variants
 
 def format_pokemon_prediction(name, confidence):
@@ -150,7 +155,7 @@ def format_pokemon_prediction(name, confidence):
         else:  # endswith("-Female")
             base_name = name[:-7]  # Remove "-Female"
             gender = "Female"
-        
+
         # Return formatted string with gender on separate line
         return f"{base_name}: {confidence}\nGender: {gender}"
     else:
@@ -161,101 +166,132 @@ async def get_collectors_for_pokemon(pokemon_name, guild_id):
     """Get all users who have collected this Pokemon in the given guild"""
     if db is None:
         return []
-    
+
     pokemon_data = load_pokemon_data()
     collectors = []
-    
+
     try:
         # Find all collections in this guild
         collections = await db.collections.find({"guild_id": guild_id}).to_list(length=None)
-        
+
         for collection in collections:
             user_pokemon = collection.get('pokemon', [])
-            
+
             # Check if user has this specific Pokemon
             if pokemon_name in user_pokemon:
                 collectors.append(collection['user_id'])
                 continue
-            
+
             # Check if user has the base form and this is a variant
             target_pokemon = find_pokemon_by_name(pokemon_name, pokemon_data)
             if target_pokemon and target_pokemon.get('is_variant'):
                 base_form = target_pokemon.get('variant_of')
                 if base_form and base_form in user_pokemon:
                     collectors.append(collection['user_id'])
-    
+
     except Exception as e:
         print(f"Error getting collectors: {e}")
-    
+
     return collectors
 
 async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
     """Add Pokemon to user's collection"""
     if db is None:
         return "Database not available"
-    
+
+    if not pokemon_names:
+        return "No Pokemon names provided"
+
     pokemon_data = load_pokemon_data()
+    if not pokemon_data:
+        return "Pokemon data not available"
+
     added_pokemon = []
     invalid_pokemon = []
-    
+
     for name in pokemon_names:
+        if not name or not isinstance(name, str):
+            continue
+
         name = name.strip()
+        if not name:
+            continue
+
         pokemon = find_pokemon_by_name(name, pokemon_data)
-        
-        if pokemon:
+
+        if pokemon and pokemon.get('name'):
             # If it's a base form, add the main name
             # If it's a variant, add the variant name
             added_pokemon.append(pokemon['name'])
         else:
             invalid_pokemon.append(name)
-    
+
     if not added_pokemon:
-        return f"Invalid Pokemon names: {', '.join(invalid_pokemon)}"
-    
+        error_msg = "No valid Pokemon names found"
+        if invalid_pokemon:
+            error_msg += f". Invalid names: {', '.join(invalid_pokemon)}"
+        return error_msg
+
     try:
         # Update or create collection
-        await db.collections.update_one(
+        result = await db.collections.update_one(
             {"user_id": user_id, "guild_id": guild_id},
             {"$addToSet": {"pokemon": {"$each": added_pokemon}}},
             upsert=True
         )
-        
-        result = f"Added to collection: {', '.join(added_pokemon)}"
+
+        response = f"Added to collection: {', '.join(added_pokemon)}"
         if invalid_pokemon:
-            result += f"\nInvalid names: {', '.join(invalid_pokemon)}"
-        
-        return result
-    
+            response += f"\nInvalid names: {', '.join(invalid_pokemon)}"
+
+        return response
+
     except Exception as e:
-        return f"Database error: {e}"
+        print(f"Database error in add_pokemon_to_collection: {e}")
+        return f"Database error: {str(e)[:100]}"
 
 async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
     """Remove Pokemon from user's collection"""
     if db is None:
         return "Database not available"
-    
+
+    if not pokemon_names:
+        return "No Pokemon names provided"
+
     pokemon_data = load_pokemon_data()
+    if not pokemon_data:
+        return "Pokemon data not available"
+
     removed_pokemon = []
     not_found_pokemon = []
-    
+
     for name in pokemon_names:
+        if not name or not isinstance(name, str):
+            continue
+
         name = name.strip()
+        if not name:
+            continue
+
         pokemon = find_pokemon_by_name(name, pokemon_data)
-        
-        if pokemon:
+
+        if pokemon and pokemon.get('name'):
             removed_pokemon.append(pokemon['name'])
         else:
             not_found_pokemon.append(name)
-    
+
     if not removed_pokemon:
-        return f"Invalid Pokemon names: {', '.join(not_found_pokemon)}"
-    
+        error_msg = "No valid Pokemon names found"
+        if not_found_pokemon:
+            error_msg += f". Invalid names: {', '.join(not_found_pokemon)}"
+        return error_msg
+
     try:
         result = await db.collections.update_one(
             {"user_id": user_id, "guild_id": guild_id},
             {"$pullAll": {"pokemon": removed_pokemon}}
         )
-        
+
         if result.modified_count > 0:
             response = f"Removed from collection: {', '.join(removed_pokemon)}"
             if not_found_pokemon:
@@ -263,39 +299,41 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
             return response
         else:
             return "No Pokemon were removed (they might not be in your collection)"
-    
+
     except Exception as e:
-        return f"Database error: {e}"
+        print(f"Database error in remove_pokemon_from_collection: {e}")
+        return f"Database error: {str(e)[:100]}"
 
 async def clear_user_collection(user_id, guild_id):
     """Clear user's entire collection for the guild"""
     if db is None:
         return "Database not available"
-    
+
     try:
         result = await db.collections.delete_one({"user_id": user_id, "guild_id": guild_id})
-        
+
         if result.deleted_count > 0:
             return "Collection cleared successfully"
         else:
             return "Your collection is already empty"
-    
+
     except Exception as e:
-        return f"Database error: {e}"
+        print(f"Database error in clear_user_collection: {e}")
+        return f"Database error: {str(e)[:100]}"
 
 async def list_user_collection(user_id, guild_id):
     """List user's Pokemon collection for the guild"""
     if db is None:
         return "Database not available"
-    
+
     try:
         collection = await db.collections.find_one({"user_id": user_id, "guild_id": guild_id})
-        
+
         if not collection or not collection.get('pokemon'):
             return "Your collection is empty"
-        
+
         pokemon_list = sorted(collection['pokemon'])
-        
+
         # Split into chunks if too long
         if len(pokemon_list) <= 20:
             return f"Your collection ({len(pokemon_list)} Pokemon):\n{', '.join(pokemon_list)}"
@@ -305,9 +343,10 @@ async def list_user_collection(user_id, guild_id):
             for i, chunk in enumerate(chunks, 1):
                 response += f"Page {i}: {', '.join(chunk)}\n"
             return response
-    
+
     except Exception as e:
-        return f"Database error: {e}"
+        print(f"Database error in list_user_collection: {e}")
+        return f"Database error: {str(e)[:100]}"
 
 @bot.event
 async def on_ready():
@@ -338,53 +377,65 @@ async def on_message(message):
     # 2) Collection commands
     if message.content.lower().startswith("m!cl "):
         command_parts = message.content[5:].strip().split()
-        
+
         if not command_parts:
             await message.reply("Usage: m!cl [add/remove/clear/list] [pokemon names]")
             return
-        
+
         subcommand = command_parts[0].lower()
-        
+
         if subcommand == "add":
             if len(command_parts) < 2:
                 await message.reply("Usage: m!cl add <pokemon names separated by commas>")
                 return
-            
-            pokemon_names = " ".join(command_parts[1:]).split(",")
+
+            pokemon_names_str = " ".join(command_parts[1:])
+            pokemon_names = [name.strip() for name in pokemon_names_str.split(",") if name.strip()]
+
+            if not pokemon_names:
+                await message.reply("No valid Pokemon names provided")
+                return
+
             result = await add_pokemon_to_collection(message.author.id, message.guild.id, pokemon_names)
             await message.reply(result)
-        
+
         elif subcommand == "remove":
             if len(command_parts) < 2:
                 await message.reply("Usage: m!cl remove <pokemon names separated by commas>")
                 return
-            
-            pokemon_names = " ".join(command_parts[1:]).split(",")
+
+            pokemon_names_str = " ".join(command_parts[1:])
+            pokemon_names = [name.strip() for name in pokemon_names_str.split(",") if name.strip()]
+
+            if not pokemon_names:
+                await message.reply("No valid Pokemon names provided")
+                return
+
             result = await remove_pokemon_from_collection(message.author.id, message.guild.id, pokemon_names)
             await message.reply(result)
-        
+
         elif subcommand == "clear":
             result = await clear_user_collection(message.author.id, message.guild.id)
             await message.reply(result)
-        
+
         elif subcommand == "list":
             result = await list_user_collection(message.author.id, message.guild.id)
             await message.reply(result)
-        
+
         else:
             await message.reply("Available commands: m!cl add, m!cl remove, m!cl clear, m!cl list")
-        
+
         return
 
     # 3) Manual predict command
     if message.content.startswith("m!predict"):
         image_url = None
-        
+
         # Check if there's a URL in the command
         url_parts = message.content.split(" ", 1)
         if len(url_parts) > 1 and url_parts[1].strip():
             image_url = url_parts[1].strip()
-        
+
         # If no URL provided, check if replying to a message with image
         elif message.reference:
             try:
@@ -396,26 +447,33 @@ async def on_message(message):
             except discord.Forbidden:
                 await message.reply("I don't have permission to access that message.")
                 return
-        
+            except Exception as e:
+                await message.reply(f"Error fetching replied message: {str(e)[:100]}")
+                return
+
         # If still no image URL found
         if not image_url:
             await message.reply("Please provide an image URL after m!predict or reply to a message with an image.")
             return
-        
+
         try:
             name, confidence = predictor.predict(image_url)
-            formatted_output = format_pokemon_prediction(name, confidence)
-            
-            # Get collectors for this Pokemon
-            collectors = await get_collectors_for_pokemon(name, message.guild.id)
-            
-            if collectors:
-                collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
-                formatted_output += f"\nCollectors: {collector_mentions}"
-            
-            await message.reply(formatted_output)
+            if name and confidence:
+                formatted_output = format_pokemon_prediction(name, confidence)
+
+                # Get collectors for this Pokemon
+                collectors = await get_collectors_for_pokemon(name, message.guild.id)
+
+                if collectors:
+                    collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
+                    formatted_output += f"\nCollectors: {collector_mentions}"
+
+                await message.reply(formatted_output)
+            else:
+                await message.reply("Could not predict Pokemon from the provided image.")
         except Exception as e:
-            await message.reply(f"Error: {e}")
+            print(f"Prediction error: {e}")
+            await message.reply(f"Error: {str(e)[:100]}")
         return
 
     # 4) Auto-detect Poketwo spawns
@@ -428,42 +486,47 @@ async def on_message(message):
                 if (embed.title == "A wild pokémon has appeared!" or 
                     (embed.title.endswith("A new wild pokémon has appeared!") and 
                      "fled." in embed.title)):
-                    
+
                     image_url = await get_image_url_from_message(message)
-                    
+
                     if image_url:
                         try:
                             name, confidence = predictor.predict(image_url)
-                            
-                            # Add confidence threshold to avoid low-confidence predictions
-                            confidence_value = float(confidence.rstrip('%'))
-                            if confidence_value >= 70.0:  # Only show if confidence >= 70%
-                                formatted_output = format_pokemon_prediction(name, confidence)
-                                
-                                # Get collectors for this Pokemon
-                                collectors = await get_collectors_for_pokemon(name, message.guild.id)
-                                
-                                if collectors:
-                                    collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
-                                    formatted_output += f"\nCollectors: {collector_mentions}"
-                                
-                                await message.reply(formatted_output)
-                            else:
-                                print(f"Low confidence prediction skipped: {name} ({confidence})")
+
+                            if name and confidence:
+                                # Add confidence threshold to avoid low-confidence predictions
+                                confidence_str = str(confidence).rstrip('%')
+                                try:
+                                    confidence_value = float(confidence_str)
+                                    if confidence_value >= 70.0:  # Only show if confidence >= 70%
+                                        formatted_output = format_pokemon_prediction(name, confidence)
+
+                                        # Get collectors for this Pokemon
+                                        collectors = await get_collectors_for_pokemon(name, message.guild.id)
+
+                                        if collectors:
+                                            collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
+                                            formatted_output += f"\nCollectors: {collector_mentions}"
+
+                                        await message.reply(formatted_output)
+                                    else:
+                                        print(f"Low confidence prediction skipped: {name} ({confidence})")
+                                except ValueError:
+                                    print(f"Could not parse confidence value: {confidence}")
                         except Exception as e:
                             print(f"Auto-detection error: {e}")
 
 async def get_image_url_from_message(message):
     """Extract image URL from message attachments or embeds"""
     image_url = None
-    
+
     # Check attachments first
     if message.attachments:
         for attachment in message.attachments:
-            if attachment.url.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            if any(attachment.url.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif"]):
                 image_url = attachment.url
                 break
-    
+
     # Check embeds if no attachment found
     if not image_url and message.embeds:
         embed = message.embeds[0]
@@ -471,14 +534,14 @@ async def get_image_url_from_message(message):
             image_url = embed.image.url
         elif embed.thumbnail and embed.thumbnail.url:
             image_url = embed.thumbnail.url
-    
+
     return image_url
 
 def main():
     if not TOKEN:
         print("Error: DISCORD_TOKEN environment variable not set")
         return
-    
+
     try:
         bot.run(TOKEN)
     except discord.LoginFailure:
