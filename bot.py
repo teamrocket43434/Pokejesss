@@ -506,7 +506,7 @@ async def list_user_collection(user_id, guild_id, page=1):
             return "Your collection is empty"
 
         pokemon_list = sorted(collection['pokemon'])
-        items_per_page = 50  # Increased from 15 to 50 Pokemon per page
+        items_per_page = 150  # Increased from 15 to 150 Pokemon per page
         total_pages = math.ceil(len(pokemon_list) / items_per_page)
 
         # Ensure page is within bounds
@@ -516,7 +516,7 @@ async def list_user_collection(user_id, guild_id, page=1):
         end_index = start_index + items_per_page
         page_pokemon = pokemon_list[start_index:end_index]
 
-        response = f"Your collection ({len(pokemon_list)} Pokemon) - Page {page}/{total_pages}:\n"
+        response = f"**__Your collection ({len(pokemon_list)} Pokemon) - Page {page}/{total_pages}:\n__**"
         response += ", ".join(page_pokemon)
 
         return response, page, total_pages
