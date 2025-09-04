@@ -8291,9 +8291,9 @@
   },
   {
     "dex_number": 555,
-    "name": "Galarian Zen Darmanitan",
+    "name": "Galarian Darmanitan",
     "other_names": {
-      "🇬🇧": "Galarian Zen Darmanitan"
+      "🇬🇧": "Galarian Darmanitan"
     },
     "is_variant": true,
     "variant_of": "Darmanitan"
@@ -13239,7 +13239,7 @@
   },
   {
     "dex_number": 867,
-    "name": "Runeri�gus",
+    "name": "Runerigus",
     "other_names": {
       "🇯🇵": "Desubān",
       "🇬🇧": "Runerigus",
