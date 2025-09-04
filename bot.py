@@ -538,15 +538,15 @@ class AFKView(discord.ui.View):
 
         if is_afk:
             button = discord.ui.Button(
-                label="Currently AFK (Click to turn OFF)",
+                label="Collection",
                 style=discord.ButtonStyle.danger,
-                emoji="🔴"
+                emoji="📦"
             )
         else:
             button = discord.ui.Button(
-                label="Currently Active (Click to turn ON AFK)",
+                label="Collection",
                 style=discord.ButtonStyle.success,
-                emoji="🟢"
+                emoji="📦"
             )
 
         button.callback = self.toggle_afk
