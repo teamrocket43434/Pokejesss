@@ -101,7 +101,7 @@ def format_pokemon_prediction(name, confidence):
 
 async def get_collectors_for_pokemon(pokemon_name, guild_id):
     """Get all users who have collected this Pokemon in the given guild"""
-    if not db:
+    if db is None:
         return []
     
     pokemon_data = load_pokemon_data()
@@ -133,7 +133,7 @@ async def get_collectors_for_pokemon(pokemon_name, guild_id):
 
 async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
     """Add Pokemon to user's collection"""
-    if not db:
+    if db is None:
         return "Database not available"
     
     pokemon_data = load_pokemon_data()
@@ -173,7 +173,7 @@ async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
 
 async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
     """Remove Pokemon from user's collection"""
-    if not db:
+    if db is None:
         return "Database not available"
     
     pokemon_data = load_pokemon_data()
@@ -211,7 +211,7 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
 
 async def clear_user_collection(user_id, guild_id):
     """Clear user's entire collection for the guild"""
-    if not db:
+    if db is None:
         return "Database not available"
     
     try:
@@ -256,7 +256,7 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
     if predictor is None:
         await initialize_predictor()
-    if db_client is None:
+    if db is None:
         await initialize_database()
 
 @bot.event
