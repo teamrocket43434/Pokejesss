@@ -40,7 +40,6 @@ async def initialize_database():
             MONGODB_URI,
             tls=True,
             tlsAllowInvalidCertificates=True,
-            tlsInsecure=True,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=10000,
             socketTimeoutMS=20000,
