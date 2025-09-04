@@ -3,6 +3,7 @@ import discord
 import asyncio
 import json
 import re
+import math
 from motor.motor_asyncio import AsyncIOMotorClient
 from predict import Prediction
 
@@ -296,30 +297,30 @@ async def get_pokemon_ping_info(pokemon_name, guild_id):
 
     return None
 
-async def set_user_afk(user_id, guild_id, is_afk=True):
-    """Set user's AFK status for a guild"""
+async def toggle_user_afk(user_id, guild_id):
+    """Toggle user's AFK status for a guild"""
     if db is None:
-        return "Database not available"
+        return "Database not available", False
 
     try:
-        if is_afk:
-            # Add user to AFK list
-            result = await db.afk_users.update_one(
+        # Check current status
+        current_afk = await db.afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+
+        if current_afk and current_afk.get('afk', False):
+            # User is currently AFK, remove them
+            await db.afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
+            return "You are no longer AFK and will be pinged for Pokemon spawns.", False
+        else:
+            # User is not AFK, add them
+            await db.afk_users.update_one(
                 {"user_id": user_id, "guild_id": guild_id},
                 {"$set": {"user_id": user_id, "guild_id": guild_id, "afk": True}},
                 upsert=True
             )
-            return "You are now AFK and won't be pinged for Pokemon spawns."
-        else:
-            # Remove user from AFK list
-            result = await db.afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
-            if result.deleted_count > 0:
-                return "You are no longer AFK and will be pinged for Pokemon spawns."
-            else:
-                return "You were not AFK."
+            return "You are now AFK and won't be pinged for Pokemon spawns.", True
     except Exception as e:
-        print(f"Error setting AFK status: {e}")
-        return f"Database error: {str(e)[:100]}"
+        print(f"Error toggling AFK status: {e}")
+        return f"Database error: {str(e)[:100]}", False
 
 async def get_afk_users(guild_id):
     """Get list of AFK user IDs for a guild"""
@@ -332,6 +333,18 @@ async def get_afk_users(guild_id):
     except Exception as e:
         print(f"Error getting AFK users: {e}")
         return []
+
+async def is_user_afk(user_id, guild_id):
+    """Check if a user is AFK"""
+    if db is None:
+        return False
+
+    try:
+        afk_doc = await db.afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+        return afk_doc and afk_doc.get('afk', False)
+    except Exception as e:
+        print(f"Error checking AFK status: {e}")
+        return False
 
 async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
     """Add Pokemon to user's collection"""
@@ -368,7 +381,9 @@ async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
     if not added_pokemon:
         error_msg = "No valid Pokemon names found"
         if invalid_pokemon:
-            error_msg += f". Invalid names: {', '.join(invalid_pokemon)}"
+            error_msg += f". Invalid names: {', '.join(invalid_pokemon[:10])}"
+            if len(invalid_pokemon) > 10:
+                error_msg += f" and {len(invalid_pokemon) - 10} more..."
         return error_msg
 
     try:
@@ -379,9 +394,17 @@ async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
             upsert=True
         )
 
-        response = f"Added to collection: {', '.join(added_pokemon)}"
+        # Create response with character limits in mind
+        if len(added_pokemon) <= 10:
+            response = f"Added {len(added_pokemon)} Pokemon: {', '.join(added_pokemon)}"
+        else:
+            response = f"Added {len(added_pokemon)} Pokemon: {', '.join(added_pokemon[:10])} and {len(added_pokemon) - 10} more..."
+
         if invalid_pokemon:
-            response += f"\nInvalid names: {', '.join(invalid_pokemon)}"
+            if len(invalid_pokemon) <= 5:
+                response += f"\nInvalid: {', '.join(invalid_pokemon)}"
+            else:
+                response += f"\nInvalid: {', '.join(invalid_pokemon[:5])} and {len(invalid_pokemon) - 5} more..."
 
         return response
 
@@ -422,7 +445,9 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
     if not removed_pokemon:
         error_msg = "No valid Pokemon names found"
         if not_found_pokemon:
-            error_msg += f". Invalid names: {', '.join(not_found_pokemon)}"
+            error_msg += f". Invalid names: {', '.join(not_found_pokemon[:10])}"
+            if len(not_found_pokemon) > 10:
+                error_msg += f" and {len(not_found_pokemon) - 10} more..."
         return error_msg
 
     try:
@@ -432,9 +457,18 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
         )
 
         if result.modified_count > 0:
-            response = f"Removed from collection: {', '.join(removed_pokemon)}"
+            # Create response with character limits in mind
+            if len(removed_pokemon) <= 10:
+                response = f"Removed {len(removed_pokemon)} Pokemon: {', '.join(removed_pokemon)}"
+            else:
+                response = f"Removed {len(removed_pokemon)} Pokemon: {', '.join(removed_pokemon[:10])} and {len(removed_pokemon) - 10} more..."
+
             if not_found_pokemon:
-                response += f"\nInvalid names: {', '.join(not_found_pokemon)}"
+                if len(not_found_pokemon) <= 5:
+                    response += f"\nInvalid: {', '.join(not_found_pokemon)}"
+                else:
+                    response += f"\nInvalid: {', '.join(not_found_pokemon[:5])} and {len(not_found_pokemon) - 5} more..."
+
             return response
         else:
             return "No Pokemon were removed (they might not be in your collection)"
@@ -460,8 +494,8 @@ async def clear_user_collection(user_id, guild_id):
         print(f"Database error in clear_user_collection: {e}")
         return f"Database error: {str(e)[:100]}"
 
-async def list_user_collection(user_id, guild_id):
-    """List user's Pokemon collection for the guild"""
+async def list_user_collection(user_id, guild_id, page=1):
+    """List user's Pokemon collection for the guild with pagination"""
     if db is None:
         return "Database not available"
 
@@ -472,20 +506,117 @@ async def list_user_collection(user_id, guild_id):
             return "Your collection is empty"
 
         pokemon_list = sorted(collection['pokemon'])
+        items_per_page = 50  # Increased from 15 to 50 Pokemon per page
+        total_pages = math.ceil(len(pokemon_list) / items_per_page)
 
-        # Split into chunks if too long
-        if len(pokemon_list) <= 20:
-            return f"Your collection ({len(pokemon_list)} Pokemon):\n{', '.join(pokemon_list)}"
-        else:
-            chunks = [pokemon_list[i:i+20] for i in range(0, len(pokemon_list), 20)]
-            response = f"Your collection ({len(pokemon_list)} Pokemon):\n"
-            for i, chunk in enumerate(chunks, 1):
-                response += f"Page {i}: {', '.join(chunk)}\n"
-            return response
+        # Ensure page is within bounds
+        page = max(1, min(page, total_pages))
+
+        start_index = (page - 1) * items_per_page
+        end_index = start_index + items_per_page
+        page_pokemon = pokemon_list[start_index:end_index]
+
+        response = f"Your collection ({len(pokemon_list)} Pokemon) - Page {page}/{total_pages}:\n"
+        response += ", ".join(page_pokemon)
+
+        return response, page, total_pages
 
     except Exception as e:
         print(f"Database error in list_user_collection: {e}")
         return f"Database error: {str(e)[:100]}"
+
+class AFKView(discord.ui.View):
+    def __init__(self, user_id, guild_id, is_afk):
+        super().__init__(timeout=300)  # 5 minutes timeout
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.update_button(is_afk)
+
+    def update_button(self, is_afk):
+        # Clear existing buttons
+        self.clear_items()
+
+        if is_afk:
+            button = discord.ui.Button(
+                label="Currently AFK (Click to turn OFF)",
+                style=discord.ButtonStyle.danger,
+                emoji="🔴"
+            )
+        else:
+            button = discord.ui.Button(
+                label="Currently Active (Click to turn ON AFK)",
+                style=discord.ButtonStyle.success,
+                emoji="🟢"
+            )
+
+        button.callback = self.toggle_afk
+        self.add_item(button)
+
+    async def toggle_afk(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button is not for you!", ephemeral=True)
+            return
+
+        message, is_afk = await toggle_user_afk(self.user_id, self.guild_id)
+        self.update_button(is_afk)
+
+        await interaction.response.edit_message(content=message, view=self)
+
+class CollectionPaginationView(discord.ui.View):
+    def __init__(self, user_id, guild_id, current_page, total_pages):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.current_page = current_page
+        self.total_pages = total_pages
+
+        # Update button states
+        self.previous_button.disabled = (current_page <= 1)
+        self.next_button.disabled = (current_page >= total_pages)
+
+    @discord.ui.button(label="◀ Previous", style=discord.ButtonStyle.primary)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button is not for you!", ephemeral=True)
+            return
+
+        new_page = max(1, self.current_page - 1)
+        result = await list_user_collection(self.user_id, self.guild_id, new_page)
+
+        if isinstance(result, tuple):
+            content, page, total_pages = result
+            self.current_page = page
+            self.total_pages = total_pages
+
+            # Update button states
+            self.previous_button.disabled = (page <= 1)
+            self.next_button.disabled = (page >= total_pages)
+
+            await interaction.response.edit_message(content=content, view=self)
+        else:
+            await interaction.response.edit_message(content=result, view=None)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button is not for you!", ephemeral=True)
+            return
+
+        new_page = min(self.total_pages, self.current_page + 1)
+        result = await list_user_collection(self.user_id, self.guild_id, new_page)
+
+        if isinstance(result, tuple):
+            content, page, total_pages = result
+            self.current_page = page
+            self.total_pages = total_pages
+
+            # Update button states
+            self.previous_button.disabled = (page <= 1)
+            self.next_button.disabled = (page >= total_pages)
+
+            await interaction.response.edit_message(content=content, view=self)
+        else:
+            await interaction.response.edit_message(content=result, view=None)
 
 @bot.event
 async def on_ready():
@@ -508,23 +639,99 @@ async def on_message(message):
         if predictor is None:
             return
 
-    # 1) Test command
+    # Help command
+    if message.content.lower() == "m!help":
+        embed = discord.Embed(
+            title="🤖 Pokemon Helper Bot Commands",
+            description="Here are all the available commands organized by category:",
+            color=0x3498db
+        )
+
+        embed.add_field(
+            name="🔧 Basic Commands",
+            value=(
+                "`m!ping` - Test if the bot is working\n"
+                "`m!help` - Show this help message"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔍 Prediction Commands", 
+            value=(
+                "`m!predict <image_url>` - Predict Pokemon from image URL\n"
+                "`m!predict` (reply to image) - Predict Pokemon from replied image\n"
+                "🤖 Auto-detection works on Poketwo spawns!"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="📚 Collection Management",
+            value=(
+                "`m!cl add <pokemon1, pokemon2, ...>` - Add Pokemon to your collection\n"
+                "`m!cl remove <pokemon1, pokemon2, ...>` - Remove Pokemon from collection\n"
+                "`m!cl list` - View your collection (with pagination)\n"
+                "`m!cl clear` - Clear your entire collection"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="😴 AFK System",
+            value=(
+                "`m!afk` - Toggle your AFK status (with interactive button)\n"
+                "AFK users won't be pinged when their Pokemon spawn"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="👑 Admin Commands",
+            value=(
+                "`m!rare-role @role` - Set role to ping for rare Pokemon\n"
+                "`m!regional-role @role` - Set role to ping for regional Pokemon\n"
+                "*Requires Administrator permission*"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="✨ Features",
+            value=(
+                "• Automatic Pokemon detection on Poketwo spawns\n"
+                "• Collector pinging (mentions users who have that Pokemon)\n"
+                "• Rare/Regional Pokemon role pinging\n"
+                "• Gender variant support\n"
+                "• Multi-language Pokemon name support"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="Bot created for Pokemon collection management | Use commands with 'm!' prefix")
+
+        await message.channel.send(embed=embed)
+        return
+
+    # Test command
     if message.content.lower() == "m!ping":
         await message.channel.send("Pong!")
         return
 
-    # 2) AFK commands
+    # AFK command with toggle button
     if message.content.lower() == "m!afk":
-        result = await set_user_afk(message.author.id, message.guild.id, True)
-        await message.reply(result)
+        current_afk = await is_user_afk(message.author.id, message.guild.id)
+
+        if current_afk:
+            initial_message = "You are currently AFK and won't be pinged for Pokemon spawns."
+        else:
+            initial_message = "You are currently active and will be pinged for Pokemon spawns."
+
+        view = AFKView(message.author.id, message.guild.id, current_afk)
+        await message.reply(initial_message, view=view)
         return
 
-    if message.content.lower() == "m!back":
-        result = await set_user_afk(message.author.id, message.guild.id, False)
-        await message.reply(result)
-        return
-
-    # 3) Role management commands
+    # Role management commands
     if message.content.lower().startswith("m!rare-role"):
         # Check if user has administrator permissions
         if not message.author.guild_permissions.administrator:
@@ -595,7 +802,7 @@ async def on_message(message):
         await message.reply(result)
         return
 
-    # 4) Collection commands
+    # Collection commands
     if message.content.lower().startswith("m!cl "):
         command_parts = message.content[5:].strip().split()
 
@@ -640,27 +847,25 @@ async def on_message(message):
             await message.reply(result)
 
         elif subcommand == "list":
-            page = 1  # Default page
+            result = await list_user_collection(message.author.id, message.guild.id, 1)
 
-            # Check if user specified a page number
-            if len(command_parts) >= 2:
-                try:
-                    page = int(command_parts[1])
-                    if page < 1:
-                        page = 1
-                except ValueError:
-                    await message.reply("Invalid page number. Using page 1.")
-                    page = 1
+            if isinstance(result, tuple):
+                content, page, total_pages = result
 
-            result = await list_user_collection(message.author.id, message.guild.id, page)
-            await message.reply(result)
+                if total_pages > 1:
+                    view = CollectionPaginationView(message.author.id, message.guild.id, page, total_pages)
+                    await message.reply(content, view=view)
+                else:
+                    await message.reply(content)
+            else:
+                await message.reply(result)
 
         else:
             await message.reply("Available commands: m!cl add, m!cl remove, m!cl clear, m!cl list")
 
         return
 
-    # 5) Manual predict command
+    # Manual predict command
     if message.content.startswith("m!predict"):
         image_url = None
 
@@ -714,7 +919,7 @@ async def on_message(message):
             await message.reply(f"Error: {str(e)[:100]}")
         return
 
-    # 6) Auto-detect Poketwo spawns
+    # Auto-detect Poketwo spawns
     if message.author.id == 716390085896962058:  # Poketwo user ID
         # Check if message has embeds with the specific titles
         if message.embeds:
