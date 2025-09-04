@@ -12154,7 +12154,7 @@
       "🇫🇷": "Meltan"
     },
     "is_variant": false,
-    "rarity": "rare"
+   � "rarity": "rare"
   },
   {
     "dex_number": 809,
@@ -12983,7 +12983,7 @@
   },
   {
     "dex_number": 867,
-    "name": "Runeri�gus",
+    "name": "Runeri��gus",
     "other_names": {
       "🇯🇵": "Desubān",
       "🇬🇧": "Runerigus",
@@ -13388,7 +13388,7 @@
     "is_variant": false,
     "rarity": "rare"
   },
-  {
+  �{
     "dex_number": 892,
     "name": "Urshifu",
     "other_names": {
@@ -13802,7 +13802,7 @@
   {
     "dex_number": 921,
     "name": "Pawmi",
-    "other_na�mes": {
+    "other_n�a�mes": {
       "🇯🇵": "Pamo",
       "🇬🇧": "Pawmi",
       "🇩🇪": "Pamo",
@@ -14222,7 +14222,7 @@
       "🇩🇪": "Flattutu",
       "🇫🇷": "Flotillon"
     },
-    "is_varia�nt": false
+    "is_var�ia�nt": false
   },
   {
     "dex_number": 956,
@@ -14639,7 +14639,7 @@
     "name": "Slither Wing",
     "other_names": {
       "🇯🇵": "Chiohauhane",
-      "🇬🇧": "Slither� Wing",
+      "🇬🇧": "Slit�her� Wing",
       "🇩🇪": "Kriechflügel",
       "🇫🇷": "Rampe-Ailes"
     },
@@ -15047,7 +15047,7 @@
     "rarity": "rare"
   },
   {
-    "dex_number": 1018,
+    "dex_num�ber": 1018,
     "name": "Archaludon",
     "other_names": {
       "🇯🇵": "Briduras",
