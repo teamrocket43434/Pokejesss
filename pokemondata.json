@@ -12154,7 +12154,7 @@
       "🇫🇷": "Meltan"
     },
     "is_variant": false,
-   � "rarity": "rare"
+    "rarity": "rare"
   },
   {
     "dex_number": 809,
@@ -13388,7 +13388,7 @@
     "is_variant": false,
     "rarity": "rare"
   },
-  {�
+  {
     "dex_number": 892,
     "name": "Urshifu",
     "other_names": {
@@ -15047,7 +15047,7 @@
     "rarity": "rare"
   },
   {
-    "dex_number"�: 1018,
+    "dex_number": 1018,
     "name": "Archaludon",
     "other_names": {
       "🇯🇵": "Briduras",
