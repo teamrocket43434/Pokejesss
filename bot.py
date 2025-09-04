@@ -108,6 +108,15 @@ def load_pokemon_data():
         print(f"Failed to load pokemondata.json: {e}")
         return []
 
+def normalize_pokemon_name(name):
+    """Remove gender suffixes from Pokemon names for comparison"""
+    if name.endswith("-Male") or name.endswith("-Female"):
+        if name.endswith("-Male"):
+            return name[:-5]  # Remove "-Male"
+        else:  # endswith("-Female")
+            return name[:-7]  # Remove "-Female"
+    return name
+
 def find_pokemon_by_name(name, pokemon_data):
     """Find Pokemon by name (including other language names)"""
     name_lower = name.lower().strip()
@@ -163,36 +172,166 @@ def format_pokemon_prediction(name, confidence):
         return f"{name}: {confidence}"
 
 async def get_collectors_for_pokemon(pokemon_name, guild_id):
-    """Get all users who have collected this Pokemon in the given guild"""
+    """Get all users who have collected this Pokemon in the given guild (excluding AFK users)"""
     if db is None:
         return []
 
     pokemon_data = load_pokemon_data()
     collectors = []
 
+    # Normalize the spawned Pokemon name (remove gender suffix if present)
+    normalized_spawn_name = normalize_pokemon_name(pokemon_name).lower()
+
     try:
+        # Get AFK users for this guild
+        afk_users = await get_afk_users(guild_id)
+
         # Find all collections in this guild
         collections = await db.collections.find({"guild_id": guild_id}).to_list(length=None)
 
         for collection in collections:
-            user_pokemon = collection.get('pokemon', [])
+            user_id = collection['user_id']
 
-            # Check if user has this specific Pokemon
-            if pokemon_name in user_pokemon:
-                collectors.append(collection['user_id'])
+            # Skip AFK users
+            if user_id in afk_users:
                 continue
 
-            # Check if user has the base form and this is a variant
+            user_pokemon = collection.get('pokemon', [])
+
+            # Check each Pokemon in user's collection
+            for collected_pokemon in user_pokemon:
+                # Normalize the collected Pokemon name
+                normalized_collected_name = normalize_pokemon_name(collected_pokemon).lower()
+
+                # If the normalized names match, this user should be pinged
+                if normalized_collected_name == normalized_spawn_name:
+                    collectors.append(user_id)
+                    break  # No need to check other Pokemon for this user
+
+            # Also check if user has the base form and this is a variant
             target_pokemon = find_pokemon_by_name(pokemon_name, pokemon_data)
             if target_pokemon and target_pokemon.get('is_variant'):
                 base_form = target_pokemon.get('variant_of')
-                if base_form and base_form in user_pokemon:
-                    collectors.append(collection['user_id'])
+                if base_form:
+                    normalized_base_form = normalize_pokemon_name(base_form).lower()
+                    for collected_pokemon in user_pokemon:
+                        normalized_collected_name = normalize_pokemon_name(collected_pokemon).lower()
+                        if normalized_collected_name == normalized_base_form:
+                            if user_id not in collectors:  # Avoid duplicates
+                                collectors.append(user_id)
+                            break
 
     except Exception as e:
         print(f"Error getting collectors: {e}")
 
     return collectors
+
+async def get_guild_ping_roles(guild_id):
+    """Get the rare and regional ping roles for a guild"""
+    if db is None:
+        return None, None
+
+    try:
+        guild_settings = await db.guild_settings.find_one({"guild_id": guild_id})
+        if guild_settings:
+            return guild_settings.get('rare_role_id'), guild_settings.get('regional_role_id')
+    except Exception as e:
+        print(f"Error getting guild ping roles: {e}")
+
+    return None, None
+
+async def set_rare_role(guild_id, role_id):
+    """Set the rare Pokemon ping role for a guild"""
+    if db is None:
+        return "Database not available"
+
+    try:
+        result = await db.guild_settings.update_one(
+            {"guild_id": guild_id},
+            {"$set": {"rare_role_id": role_id}},
+            upsert=True
+        )
+        return "Rare role set successfully!"
+    except Exception as e:
+        print(f"Error setting rare role: {e}")
+        return f"Database error: {str(e)[:100]}"
+
+async def set_regional_role(guild_id, role_id):
+    """Set the regional Pokemon ping role for a guild"""
+    if db is None:
+        return "Database not available"
+
+    try:
+        result = await db.guild_settings.update_one(
+            {"guild_id": guild_id},
+            {"$set": {"regional_role_id": role_id}},
+            upsert=True
+        )
+        return "Regional role set successfully!"
+    except Exception as e:
+        print(f"Error setting regional role: {e}")
+        return f"Database error: {str(e)[:100]}"
+
+async def get_pokemon_ping_info(pokemon_name, guild_id):
+    """Get ping information for a Pokemon based on its rarity"""
+    if db is None:
+        return None
+
+    pokemon_data = load_pokemon_data()
+    pokemon = find_pokemon_by_name(pokemon_name, pokemon_data)
+
+    if not pokemon:
+        return None
+
+    rarity = pokemon.get('rarity')
+    if not rarity:
+        return None
+
+    rare_role_id, regional_role_id = await get_guild_ping_roles(guild_id)
+
+    if rarity == "rare" and rare_role_id:
+        return f"Rare Ping: <@&{rare_role_id}>"
+    elif rarity == "regional" and regional_role_id:
+        return f"Regional Ping: <@&{regional_role_id}>"
+
+    return None
+
+async def set_user_afk(user_id, guild_id, is_afk=True):
+    """Set user's AFK status for a guild"""
+    if db is None:
+        return "Database not available"
+
+    try:
+        if is_afk:
+            # Add user to AFK list
+            result = await db.afk_users.update_one(
+                {"user_id": user_id, "guild_id": guild_id},
+                {"$set": {"user_id": user_id, "guild_id": guild_id, "afk": True}},
+                upsert=True
+            )
+            return "You are now AFK and won't be pinged for Pokemon spawns."
+        else:
+            # Remove user from AFK list
+            result = await db.afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
+            if result.deleted_count > 0:
+                return "You are no longer AFK and will be pinged for Pokemon spawns."
+            else:
+                return "You were not AFK."
+    except Exception as e:
+        print(f"Error setting AFK status: {e}")
+        return f"Database error: {str(e)[:100]}"
+
+async def get_afk_users(guild_id):
+    """Get list of AFK user IDs for a guild"""
+    if db is None:
+        return []
+
+    try:
+        afk_docs = await db.afk_users.find({"guild_id": guild_id, "afk": True}).to_list(length=None)
+        return [doc['user_id'] for doc in afk_docs]
+    except Exception as e:
+        print(f"Error getting AFK users: {e}")
+        return []
 
 async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
     """Add Pokemon to user's collection"""
@@ -374,7 +513,89 @@ async def on_message(message):
         await message.channel.send("Pong!")
         return
 
-    # 2) Collection commands
+    # 2) AFK commands
+    if message.content.lower() == "m!afk":
+        result = await set_user_afk(message.author.id, message.guild.id, True)
+        await message.reply(result)
+        return
+
+    if message.content.lower() == "m!back":
+        result = await set_user_afk(message.author.id, message.guild.id, False)
+        await message.reply(result)
+        return
+
+    # 3) Role management commands
+    if message.content.lower().startswith("m!rare-role"):
+        # Check if user has administrator permissions
+        if not message.author.guild_permissions.administrator:
+            await message.reply("You need administrator permissions to use this command.")
+            return
+
+        # Extract role mention or ID
+        content_parts = message.content.split()
+        if len(content_parts) < 2:
+            await message.reply("Usage: m!rare-role @role or m!rare-role <role_id>")
+            return
+
+        role_mention = content_parts[1]
+        role_id = None
+
+        # Try to extract role ID from mention or direct ID
+        if role_mention.startswith("<@&") and role_mention.endswith(">"):
+            role_id = int(role_mention[3:-1])
+        else:
+            try:
+                role_id = int(role_mention)
+            except ValueError:
+                await message.reply("Invalid role mention or ID. Use @role or role ID.")
+                return
+
+        # Verify role exists in guild
+        role = message.guild.get_role(role_id)
+        if not role:
+            await message.reply("Role not found in this server.")
+            return
+
+        result = await set_rare_role(message.guild.id, role_id)
+        await message.reply(result)
+        return
+
+    if message.content.lower().startswith("m!regional-role"):
+        # Check if user has administrator permissions
+        if not message.author.guild_permissions.administrator:
+            await message.reply("You need administrator permissions to use this command.")
+            return
+
+        # Extract role mention or ID
+        content_parts = message.content.split()
+        if len(content_parts) < 2:
+            await message.reply("Usage: m!regional-role @role or m!regional-role <role_id>")
+            return
+
+        role_mention = content_parts[1]
+        role_id = None
+
+        # Try to extract role ID from mention or direct ID
+        if role_mention.startswith("<@&") and role_mention.endswith(">"):
+            role_id = int(role_mention[3:-1])
+        else:
+            try:
+                role_id = int(role_mention)
+            except ValueError:
+                await message.reply("Invalid role mention or ID. Use @role or role ID.")
+                return
+
+        # Verify role exists in guild
+        role = message.guild.get_role(role_id)
+        if not role:
+            await message.reply("Role not found in this server.")
+            return
+
+        result = await set_regional_role(message.guild.id, role_id)
+        await message.reply(result)
+        return
+
+    # 4) Collection commands
     if message.content.lower().startswith("m!cl "):
         command_parts = message.content[5:].strip().split()
 
@@ -419,7 +640,19 @@ async def on_message(message):
             await message.reply(result)
 
         elif subcommand == "list":
-            result = await list_user_collection(message.author.id, message.guild.id)
+            page = 1  # Default page
+
+            # Check if user specified a page number
+            if len(command_parts) >= 2:
+                try:
+                    page = int(command_parts[1])
+                    if page < 1:
+                        page = 1
+                except ValueError:
+                    await message.reply("Invalid page number. Using page 1.")
+                    page = 1
+
+            result = await list_user_collection(message.author.id, message.guild.id, page)
             await message.reply(result)
 
         else:
@@ -427,7 +660,7 @@ async def on_message(message):
 
         return
 
-    # 3) Manual predict command
+    # 5) Manual predict command
     if message.content.startswith("m!predict"):
         image_url = None
 
@@ -468,6 +701,11 @@ async def on_message(message):
                     collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
                     formatted_output += f"\nCollectors: {collector_mentions}"
 
+                # Get ping info for rare/regional Pokemon
+                ping_info = await get_pokemon_ping_info(name, message.guild.id)
+                if ping_info:
+                    formatted_output += f"\n{ping_info}"
+
                 await message.reply(formatted_output)
             else:
                 await message.reply("Could not predict Pokemon from the provided image.")
@@ -476,7 +714,7 @@ async def on_message(message):
             await message.reply(f"Error: {str(e)[:100]}")
         return
 
-    # 4) Auto-detect Poketwo spawns
+    # 6) Auto-detect Poketwo spawns
     if message.author.id == 716390085896962058:  # Poketwo user ID
         # Check if message has embeds with the specific titles
         if message.embeds:
@@ -507,6 +745,11 @@ async def on_message(message):
                                         if collectors:
                                             collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
                                             formatted_output += f"\nCollectors: {collector_mentions}"
+
+                                        # Get ping info for rare/regional Pokemon
+                                        ping_info = await get_pokemon_ping_info(name, message.guild.id)
+                                        if ping_info:
+                                            formatted_output += f"\n{ping_info}"
 
                                         await message.reply(formatted_output)
                                     else:
