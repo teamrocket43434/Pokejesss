@@ -396,16 +396,16 @@ async def add_pokemon_to_collection(user_id, guild_id, pokemon_names):
         )
 
         # Create response with character limits in mind
-        if len(added_pokemon) <= 10:
+        if len(added_pokemon) <= 150:
             response = f"Added {len(added_pokemon)} Pokemon: {', '.join(added_pokemon)}"
         else:
-            response = f"Added {len(added_pokemon)} Pokemon: {', '.join(added_pokemon[:10])} and {len(added_pokemon) - 10} more..."
+            response = f"Added {len(added_pokemon)} Pokemon: {', '.join(added_pokemon[:150])} and {len(added_pokemon) - 150} more..."
 
         if invalid_pokemon:
-            if len(invalid_pokemon) <= 5:
+            if len(invalid_pokemon) <= 30:
                 response += f"\nInvalid: {', '.join(invalid_pokemon)}"
             else:
-                response += f"\nInvalid: {', '.join(invalid_pokemon[:5])} and {len(invalid_pokemon) - 5} more..."
+                response += f"\nInvalid: {', '.join(invalid_pokemon[:30])} and {len(invalid_pokemon) - 30} more..."
 
         return response
 
@@ -446,9 +446,9 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
     if not removed_pokemon:
         error_msg = "No valid Pokemon names found"
         if not_found_pokemon:
-            error_msg += f". Invalid names: {', '.join(not_found_pokemon[:10])}"
-            if len(not_found_pokemon) > 10:
-                error_msg += f" and {len(not_found_pokemon) - 10} more..."
+            error_msg += f". Invalid names: {', '.join(not_found_pokemon[:30])}"
+            if len(not_found_pokemon) > 30:
+                error_msg += f" and {len(not_found_pokemon) - 30} more..."
         return error_msg
 
     try:
@@ -459,16 +459,16 @@ async def remove_pokemon_from_collection(user_id, guild_id, pokemon_names):
 
         if result.modified_count > 0:
             # Create response with character limits in mind
-            if len(removed_pokemon) <= 10:
+            if len(removed_pokemon) <= 150:
                 response = f"Removed {len(removed_pokemon)} Pokemon: {', '.join(removed_pokemon)}"
             else:
-                response = f"Removed {len(removed_pokemon)} Pokemon: {', '.join(removed_pokemon[:10])} and {len(removed_pokemon) - 10} more..."
+                response = f"Removed {len(removed_pokemon)} Pokemon: {', '.join(removed_pokemon[:150])} and {len(removed_pokemon) - 150} more..."
 
             if not_found_pokemon:
-                if len(not_found_pokemon) <= 5:
+                if len(not_found_pokemon) <= 30:
                     response += f"\nInvalid: {', '.join(not_found_pokemon)}"
                 else:
-                    response += f"\nInvalid: {', '.join(not_found_pokemon[:5])} and {len(not_found_pokemon) - 5} more..."
+                    response += f"\nInvalid: {', '.join(not_found_pokemon[:30])} and {len(not_found_pokemon) - 30} more..."
 
             return response
         else:
