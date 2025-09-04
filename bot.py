@@ -569,8 +569,8 @@ async def process_message_commands(message):
         embed.add_field(
             name="📚 Collection Management",
             value=(
-                "`m!cl add <pokemon1, pokemon2, ...>` - Add Pokemon to your collection\n"
-                "`m!cl remove <pokemon1, pokemon2, ...>` - Remove Pokemon from collection\n"
+                "`m!cl add <pokemon1, pokemon2, ...>` - Add Pokemons to your collection\n"
+                "`m!cl remove <pokemon1, pokemon2, ...>` - Remove Pokemons from collection\n"
                 "`m!cl list` - View your collection (with pagination)\n"
                 "`m!cl clear` - Clear your entire collection"
             ),
