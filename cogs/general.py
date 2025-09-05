@@ -135,9 +135,20 @@ class General(commands.Cog):
         )
 
         embed.add_field(
+            name="✨ Shiny Hunt System",
+            value=(
+                "`m!sh <pokemon>` - Set Pokemon to hunt (only one at a time)\n"
+                "`m!sh` - Check what Pokemon you're currently hunting\n"
+                "`m!sh clear` or `m!sh none` - Stop hunting"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
             name="😴 AFK System",
             value=(
                 "`m!afk` - Toggle your AFK status (with interactive button)\n"
+                "`m!rareping` - Toggle rare Pokemon pings\n"
                 "AFK users won't be pinged when their Pokemon spawn"
             ),
             inline=False
@@ -157,6 +168,7 @@ class General(commands.Cog):
             name="✨ Features",
             value=(
                 "• Automatic Pokemon detection on Poketwo spawns\n"
+                "• Shiny hunter pinging (mentions users hunting that Pokemon)\n"
                 "• Collector pinging (mentions users who have that Pokemon)\n"
                 "• Rare/Regional Pokemon role pinging\n"
                 "• Gender variant support\n"
@@ -232,9 +244,15 @@ class General(commands.Cog):
             if name and confidence:
                 formatted_output = format_pokemon_prediction(name, confidence)
 
-                # Get collectors for this Pokemon using collection cog
+                # Get shiny hunters for this Pokemon
                 collection_cog = self.bot.get_cog('Collection')
                 if collection_cog:
+                    hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, ctx.guild.id)
+                    if hunters:
+                        hunter_mentions = " ".join([f"<@{user_id}>" for user_id in hunters])
+                        formatted_output += f"\nShiny Hunters: {hunter_mentions}"
+
+                    # Get collectors for this Pokemon
                     collectors = await collection_cog.get_collectors_for_pokemon(name, ctx.guild.id)
                     if collectors:
                         collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
@@ -316,9 +334,15 @@ class General(commands.Cog):
                                         if confidence_value >= 70.0:  # Only show if confidence >= 70%
                                             formatted_output = format_pokemon_prediction(name, confidence)
 
-                                            # Get collectors for this Pokemon using collection cog
+                                            # Get shiny hunters for this Pokemon using collection cog
                                             collection_cog = self.bot.get_cog('Collection')
                                             if collection_cog:
+                                                hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, message.guild.id)
+                                                if hunters:
+                                                    hunter_mentions = " ".join([f"<@{user_id}>" for user_id in hunters])
+                                                    formatted_output += f"\nShiny Hunters: {hunter_mentions}"
+
+                                                # Get collectors for this Pokemon
                                                 collectors = await collection_cog.get_collectors_for_pokemon(name, message.guild.id)
                                                 if collectors:
                                                     collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
