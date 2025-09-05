@@ -9,6 +9,96 @@ from utils import (
     is_rare_pokemon  # Import the is_rare_pokemon function
 )
 
+class AFKView(discord.ui.View):
+    def __init__(self, user_id, guild_id, collection_afk, shiny_hunt_afk, cog):
+        super().__init__(timeout=300)  # 5 minutes timeout
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.cog = cog
+        self.update_buttons(collection_afk, shiny_hunt_afk)
+
+    def update_buttons(self, collection_afk, shiny_hunt_afk):
+        # Clear existing buttons
+        self.clear_items()
+
+        # Collection AFK button
+        if collection_afk:
+            collection_button = discord.ui.Button(
+                label="Collection Pings: OFF",
+                style=discord.ButtonStyle.danger,
+                emoji="🔕",
+                row=0
+            )
+        else:
+            collection_button = discord.ui.Button(
+                label="Collection Pings: ON",
+                style=discord.ButtonStyle.success,
+                emoji="🔔",
+                row=0
+            )
+
+        collection_button.callback = self.toggle_collection_afk
+        self.add_item(collection_button)
+
+        # Shiny Hunt AFK button
+        if shiny_hunt_afk:
+            shiny_button = discord.ui.Button(
+                label="Shiny Hunt Pings: OFF",
+                style=discord.ButtonStyle.danger,
+                emoji="😴",
+                row=1
+            )
+        else:
+            shiny_button = discord.ui.Button(
+                label="Shiny Hunt Pings: ON",
+                style=discord.ButtonStyle.success,
+                emoji="✨",
+                row=1
+            )
+
+        shiny_button.callback = self.toggle_shiny_hunt_afk
+        self.add_item(shiny_button)
+
+    async def toggle_collection_afk(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button is not for you!", ephemeral=True)
+            return
+
+        # Get collection cog to call the method
+        collection_cog = self.cog.bot.get_cog('Collection')
+        if not collection_cog:
+            await interaction.response.send_message("Collection system not available", ephemeral=True)
+            return
+
+        message, new_collection_afk = await collection_cog.toggle_user_collection_afk(self.user_id, self.guild_id)
+
+        # Get current shiny hunt status
+        current_shiny_hunt_afk = await collection_cog.is_user_shiny_hunt_afk(self.user_id, self.guild_id)
+
+        self.update_buttons(new_collection_afk, current_shiny_hunt_afk)
+
+        await interaction.response.edit_message(content=message, view=self)
+
+    async def toggle_shiny_hunt_afk(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This button is not for you!", ephemeral=True)
+            return
+
+        # Get collection cog to call the method
+        collection_cog = self.cog.bot.get_cog('Collection')
+        if not collection_cog:
+            await interaction.response.send_message("Collection system not available", ephemeral=True)
+            return
+
+        message, new_shiny_hunt_afk = await collection_cog.toggle_user_shiny_hunt_afk(self.user_id, self.guild_id)
+
+        # Get current collection status
+        current_collection_afk = await collection_cog.is_user_collection_afk(self.user_id, self.guild_id)
+
+        self.update_buttons(current_collection_afk, new_shiny_hunt_afk)
+
+        await interaction.response.edit_message(content=message, view=self)
+
 class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -87,13 +177,34 @@ class General(commands.Cog):
         # Use the is_rare_pokemon function to check if it should get rare ping
         if is_rare_pokemon(pokemon) and rare_role_id:
             return f"Rare Ping: <@&{rare_role_id}>"
-        
+
         # Check if it's regional (if you have regional Pokemon in your data)
         rarity = pokemon.get('rarity', '').lower()
         if rarity == "regional" and regional_role_id:
             return f"Regional Ping: <@&{regional_role_id}>"
 
         return None
+
+    @commands.command(name="afk")
+    async def afk_command(self, ctx):
+        """Toggle AFK status with separate buttons for collection and shiny hunt pings"""
+        collection_cog = self.bot.get_cog('Collection')
+        if not collection_cog:
+            await ctx.reply("Collection system not available")
+            return
+
+        # Get current AFK statuses
+        current_collection_afk = await collection_cog.is_user_collection_afk(ctx.author.id, ctx.guild.id)
+        current_shiny_hunt_afk = await collection_cog.is_user_shiny_hunt_afk(ctx.author.id, ctx.guild.id)
+
+        # Create status message
+        collection_status = "OFF" if current_collection_afk else "ON"
+        shiny_hunt_status = "OFF" if current_shiny_hunt_afk else "ON"
+
+        initial_message = f"**Your current AFK settings:**\nCollection Pings: {collection_status}\nShiny Hunt Pings: {shiny_hunt_status}\n\nUse the buttons below to toggle each setting individually."
+
+        view = AFKView(ctx.author.id, ctx.guild.id, current_collection_afk, current_shiny_hunt_afk, self)
+        await ctx.reply(initial_message, view=view)
 
     @commands.command(name="help")
     async def help_command(self, ctx):
@@ -147,9 +258,10 @@ class General(commands.Cog):
         embed.add_field(
             name="😴 AFK System",
             value=(
-                "`m!afk` - Toggle your AFK status (with interactive button)\n"
+                "`m!afk` - Toggle your AFK status with separate buttons for collection and shiny hunt pings\n"
                 "`m!rareping` - Toggle rare Pokemon pings\n"
-                "AFK users won't be pinged when their Pokemon spawn"
+                "Collection AFK: Won't be pinged when your Pokemon spawn\n"
+                "Shiny Hunt AFK: Your ID shows but won't be pinged when hunting Pokemon spawn"
             ),
             inline=False
         )
@@ -249,8 +361,7 @@ class General(commands.Cog):
                 if collection_cog:
                     hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, ctx.guild.id)
                     if hunters:
-                        hunter_mentions = " ".join([f"<@{user_id}>" for user_id in hunters])
-                        formatted_output += f"\nShiny Hunters: {hunter_mentions}"
+                        formatted_output += f"\nShiny Hunters: {' '.join(hunters)}"
 
                     # Get collectors for this Pokemon
                     collectors = await collection_cog.get_collectors_for_pokemon(name, ctx.guild.id)
@@ -339,8 +450,7 @@ class General(commands.Cog):
                                             if collection_cog:
                                                 hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, message.guild.id)
                                                 if hunters:
-                                                    hunter_mentions = " ".join([f"<@{user_id}>" for user_id in hunters])
-                                                    formatted_output += f"\nShiny Hunters: {hunter_mentions}"
+                                                    formatted_output += f"\nShiny Hunters: {' '.join(hunters)}"
 
                                                 # Get collectors for this Pokemon
                                                 collectors = await collection_cog.get_collectors_for_pokemon(name, message.guild.id)
