@@ -169,6 +169,56 @@ class Collection(commands.Cog):
 
         return collectors
 
+    async def get_shiny_hunters_for_pokemon(self, pokemon_name, guild_id):
+        """Get all users hunting this Pokemon in the given guild (excluding AFK users)"""
+        if self.db is None:
+            return []
+
+        pokemon_data = load_pokemon_data()
+        hunters = []
+
+        # Normalize the spawned Pokemon name (remove gender suffix if present)
+        normalized_spawn_name = normalize_pokemon_name(pokemon_name).lower()
+
+        try:
+            # Get AFK users for this guild
+            afk_users = await self.get_afk_users(guild_id)
+
+            # Find all shiny hunts in this guild
+            shiny_hunts = await self.db.shiny_hunts.find({"guild_id": guild_id}).to_list(length=None)
+
+            for hunt in shiny_hunts:
+                user_id = hunt['user_id']
+
+                # Skip AFK users
+                if user_id in afk_users:
+                    continue
+
+                hunting_pokemon = hunt.get('pokemon')
+                if hunting_pokemon:
+                    # Normalize the hunting Pokemon name
+                    normalized_hunting_name = normalize_pokemon_name(hunting_pokemon).lower()
+
+                    # If the normalized names match, this user should be pinged
+                    if normalized_hunting_name == normalized_spawn_name:
+                        hunters.append(user_id)
+                        continue
+
+                # Also check if user is hunting the base form and this is a variant
+                target_pokemon = find_pokemon_by_name(pokemon_name, pokemon_data)
+                if target_pokemon and target_pokemon.get('is_variant'):
+                    base_form = target_pokemon.get('variant_of')
+                    if base_form:
+                        normalized_base_form = normalize_pokemon_name(base_form).lower()
+                        normalized_hunting_name = normalize_pokemon_name(hunting_pokemon).lower()
+                        if normalized_hunting_name == normalized_base_form:
+                            hunters.append(user_id)
+
+        except Exception as e:
+            print(f"Error getting shiny hunters: {e}")
+
+        return hunters
+
     async def get_rare_collectors(self, guild_id):
         """Get all users who want rare pings (Legendary, Mythical, Ultra Beast) in the given guild (excluding AFK users)"""
         if self.db is None:
@@ -301,6 +351,72 @@ class Collection(commands.Cog):
         except Exception as e:
             print(f"Error checking rare ping status: {e}")
             return False
+
+    async def set_shiny_hunt(self, user_id, guild_id, pokemon_name):
+        """Set user's shiny hunt Pokemon for a guild (only one Pokemon allowed)"""
+        if self.db is None:
+            return "Database not available"
+
+        if not pokemon_name:
+            return "No Pokemon name provided"
+
+        pokemon_data = load_pokemon_data()
+        if not pokemon_data:
+            return "Pokemon data not available"
+
+        # Use flexible matching that handles accents
+        pokemon = find_pokemon_by_name_flexible(pokemon_name, pokemon_data)
+
+        if not pokemon or not pokemon.get('name'):
+            return f"Invalid Pokemon name: {pokemon_name}"
+
+        try:
+            # Set the hunt Pokemon (replace any existing hunt)
+            await self.db.shiny_hunts.update_one(
+                {"user_id": user_id, "guild_id": guild_id},
+                {"$set": {"user_id": user_id, "guild_id": guild_id, "pokemon": pokemon['name']}},
+                upsert=True
+            )
+
+            return f"Now hunting: **{pokemon['name']}**"
+
+        except Exception as e:
+            print(f"Database error in set_shiny_hunt: {e}")
+            return f"Database error: {str(e)[:100]}"
+
+    async def clear_shiny_hunt(self, user_id, guild_id):
+        """Clear user's shiny hunt for a guild"""
+        if self.db is None:
+            return "Database not available"
+
+        try:
+            result = await self.db.shiny_hunts.delete_one({"user_id": user_id, "guild_id": guild_id})
+
+            if result.deleted_count > 0:
+                return "Shiny hunt cleared successfully"
+            else:
+                return "You are not hunting anything"
+
+        except Exception as e:
+            print(f"Database error in clear_shiny_hunt: {e}")
+            return f"Database error: {str(e)[:100]}"
+
+    async def get_user_shiny_hunt(self, user_id, guild_id):
+        """Get user's current shiny hunt Pokemon"""
+        if self.db is None:
+            return "Database not available"
+
+        try:
+            hunt = await self.db.shiny_hunts.find_one({"user_id": user_id, "guild_id": guild_id})
+
+            if hunt and hunt.get('pokemon'):
+                return f"You are currently hunting: **{hunt['pokemon']}**"
+            else:
+                return "You are not hunting anything"
+
+        except Exception as e:
+            print(f"Database error in get_user_shiny_hunt: {e}")
+            return f"Database error: {str(e)[:100]}"
 
     async def add_pokemon_to_collection(self, user_id, guild_id, pokemon_names):
         """Add Pokemon to user's collection with accent-insensitive matching"""
@@ -501,6 +617,38 @@ class Collection(commands.Cog):
         """Toggle rare ping status for Legendary, Mythical, and Ultra Beast Pokemon"""
         message, enabled = await self.toggle_rare_ping(ctx.author.id, ctx.guild.id)
         await ctx.reply(message)
+
+    @commands.command(name="sh")
+    async def shiny_hunt_command(self, ctx, *, args: str = None):
+        """Manage shiny hunt - set, clear, or check current hunt"""
+        if not args:
+            # Show current hunt
+            result = await self.get_user_shiny_hunt(ctx.author.id, ctx.guild.id)
+            await ctx.reply(result)
+            return
+
+        # Parse arguments
+        args = args.strip().lower()
+        
+        if args in ["clear", "none"]:
+            # Clear hunt
+            result = await self.clear_shiny_hunt(ctx.author.id, ctx.guild.id)
+            await ctx.reply(result)
+            return
+
+        # Check if multiple Pokemon provided
+        pokemon_names = [name.strip() for name in args.split(",") if name.strip()]
+        
+        if len(pokemon_names) > 1:
+            await ctx.reply("You can't hunt two Pokemon, only one!")
+            return
+
+        if len(pokemon_names) == 1:
+            # Set new hunt
+            result = await self.set_shiny_hunt(ctx.author.id, ctx.guild.id, pokemon_names[0])
+            await ctx.reply(result)
+        else:
+            await ctx.reply("Please provide a Pokemon name to hunt, or use 'clear'/'none' to stop hunting.")
 
     @commands.group(name="cl", invoke_without_command=True)
     async def collection_group(self, ctx):
