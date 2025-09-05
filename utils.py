@@ -37,14 +37,14 @@ def find_pokemon_by_name(name, pokemon_data):
     """Find Pokemon by name (including other language names) - updated for new JSON structure"""
     if not name or not pokemon_data:
         return None
-        
+
     name_lower = name.lower().strip()
-    
+
     for pokemon in pokemon_data:
         # Check main name
         if pokemon.get('name', '').lower() == name_lower:
             return pokemon
-            
+
         # Check other language names (handles both strings and arrays)
         other_names = pokemon.get('other_names')
         if other_names and isinstance(other_names, dict):
@@ -88,27 +88,6 @@ def find_pokemon_by_name_flexible(search_name, pokemon_data):
                         if lang_name and isinstance(lang_name, str):
                             if normalize_pokemon_name(lang_name).lower() == normalized_search:
                                 return pokemon
-
-    # If no exact match, try partial match (contains)
-    for pokemon in pokemon_data:
-        # Check main name
-        if normalized_search in normalize_pokemon_name(pokemon.get('name', '')).lower():
-            return pokemon
-
-        # Check other language names (handles both strings and arrays)
-        other_names = pokemon.get('other_names')
-        if other_names and isinstance(other_names, dict):
-            for lang_name_data in other_names.values():
-                # Handle both string and array formats
-                if isinstance(lang_name_data, str):
-                    if normalized_search in normalize_pokemon_name(lang_name_data).lower():
-                        return pokemon
-                elif isinstance(lang_name_data, list):
-                    for lang_name in lang_name_data:
-                        if lang_name and isinstance(lang_name, str):
-                            if normalized_search in normalize_pokemon_name(lang_name).lower():
-                                return pokemon
-
     return None
 
 def get_pokemon_variants(base_pokemon_name, pokemon_data):
@@ -149,7 +128,12 @@ def is_rare_pokemon(pokemon):
         return False
 
     rarity = pokemon.get('rarity', '').lower()
-    return rarity in ['legendary', 'mythical', 'ultra beast']
+    is_rare = rarity in ['legendary', 'mythical', 'ultra beast']
+
+    # Debug logging
+    print(f"DEBUG is_rare_pokemon: Pokemon {pokemon.get('name')}, rarity '{rarity}', is_rare: {is_rare}")
+
+    return is_rare
 
 async def get_image_url_from_message(message):
     """Extract image URL from message attachments or embeds"""
