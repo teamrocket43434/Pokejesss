@@ -5,7 +5,8 @@ from utils import (
     load_pokemon_data,
     find_pokemon_by_name,
     format_pokemon_prediction,
-    get_image_url_from_message
+    get_image_url_from_message,
+    is_rare_pokemon  # Import the is_rare_pokemon function
 )
 
 class General(commands.Cog):
@@ -81,15 +82,15 @@ class General(commands.Cog):
         if not pokemon:
             return None
 
-        rarity = pokemon.get('rarity')
-        if not rarity:
-            return None
-
         rare_role_id, regional_role_id = await self.get_guild_ping_roles(guild_id)
 
-        if rarity == "rare" and rare_role_id:
+        # Use the is_rare_pokemon function to check if it should get rare ping
+        if is_rare_pokemon(pokemon) and rare_role_id:
             return f"Rare Ping: <@&{rare_role_id}>"
-        elif rarity == "regional" and regional_role_id:
+        
+        # Check if it's regional (if you have regional Pokemon in your data)
+        rarity = pokemon.get('rarity', '').lower()
+        if rarity == "regional" and regional_role_id:
             return f"Regional Ping: <@&{regional_role_id}>"
 
         return None
