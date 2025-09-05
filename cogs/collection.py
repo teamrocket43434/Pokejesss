@@ -640,7 +640,7 @@ class Collection(commands.Cog):
         pokemon_names = [name.strip() for name in args.split(",") if name.strip()]
 
         if len(pokemon_names) > 1:
-            await ctx.reply("You can't hunt two Pokemon, only one!")
+            await ctx.reply("You can't hunt more than one Pokemon!")
             return
 
         if len(pokemon_names) == 1:
