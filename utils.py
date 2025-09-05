@@ -34,23 +34,29 @@ def normalize_pokemon_name(name):
     return without_accents.strip()
 
 def find_pokemon_by_name(name, pokemon_data):
-    """Find Pokemon by name (including other language names) - original function"""
+    """Find Pokemon by name (including other language names) - updated for new JSON structure"""
     name_lower = name.lower().strip()
     for pokemon in pokemon_data:
         # Check main name
         if pokemon.get('name', '').lower() == name_lower:
             return pokemon
-        # Check other language names (only if the key exists and is not None)
+        # Check other language names (handles both strings and arrays)
         other_names = pokemon.get('other_names')
         if other_names and isinstance(other_names, dict):
-            for lang_name in other_names.values():
-                if lang_name and isinstance(lang_name, str) and lang_name.lower() == name_lower:
-                    return pokemon
+            for lang_name_data in other_names.values():
+                # Handle both string and array formats
+                if isinstance(lang_name_data, str):
+                    if lang_name_data.lower() == name_lower:
+                        return pokemon
+                elif isinstance(lang_name_data, list):
+                    for lang_name in lang_name_data:
+                        if lang_name and isinstance(lang_name, str) and lang_name.lower() == name_lower:
+                            return pokemon
     return None
 
 def find_pokemon_by_name_flexible(search_name, pokemon_data):
     """
-    Find Pokemon by name with flexible matching (accent-insensitive)
+    Find Pokemon by name with flexible matching (accent-insensitive) - updated for new JSON structure
     """
     if not search_name or not pokemon_data:
         return None
@@ -64,13 +70,19 @@ def find_pokemon_by_name_flexible(search_name, pokemon_data):
         if normalize_pokemon_name(pokemon.get('name', '')).lower() == normalized_search:
             return pokemon
 
-        # Check other language names
+        # Check other language names (handles both strings and arrays)
         other_names = pokemon.get('other_names')
         if other_names and isinstance(other_names, dict):
-            for lang_name in other_names.values():
-                if lang_name and isinstance(lang_name, str):
-                    if normalize_pokemon_name(lang_name).lower() == normalized_search:
+            for lang_name_data in other_names.values():
+                # Handle both string and array formats
+                if isinstance(lang_name_data, str):
+                    if normalize_pokemon_name(lang_name_data).lower() == normalized_search:
                         return pokemon
+                elif isinstance(lang_name_data, list):
+                    for lang_name in lang_name_data:
+                        if lang_name and isinstance(lang_name, str):
+                            if normalize_pokemon_name(lang_name).lower() == normalized_search:
+                                return pokemon
 
     # If no exact match, try partial match (contains)
     for pokemon in pokemon_data:
@@ -78,13 +90,19 @@ def find_pokemon_by_name_flexible(search_name, pokemon_data):
         if normalized_search in normalize_pokemon_name(pokemon.get('name', '')).lower():
             return pokemon
 
-        # Check other language names
+        # Check other language names (handles both strings and arrays)
         other_names = pokemon.get('other_names')
         if other_names and isinstance(other_names, dict):
-            for lang_name in other_names.values():
-                if lang_name and isinstance(lang_name, str):
-                    if normalized_search in normalize_pokemon_name(lang_name).lower():
+            for lang_name_data in other_names.values():
+                # Handle both string and array formats
+                if isinstance(lang_name_data, str):
+                    if normalized_search in normalize_pokemon_name(lang_name_data).lower():
                         return pokemon
+                elif isinstance(lang_name_data, list):
+                    for lang_name in lang_name_data:
+                        if lang_name and isinstance(lang_name, str):
+                            if normalized_search in normalize_pokemon_name(lang_name).lower():
+                                return pokemon
 
     return None
 
@@ -119,6 +137,14 @@ def format_pokemon_prediction(name, confidence):
     else:
         # Return normal format for Pokemon without gender variants
         return f"{name}: {confidence}"
+
+def is_rare_pokemon(pokemon):
+    """Check if a Pokemon should trigger rare ping (Legendary, Mythical, or Ultra Beast)"""
+    if not pokemon:
+        return False
+
+    rarity = pokemon.get('rarity', '').lower()
+    return rarity in ['legendary', 'mythical', 'ultra beast']
 
 async def get_image_url_from_message(message):
     """Extract image URL from message attachments or embeds"""
