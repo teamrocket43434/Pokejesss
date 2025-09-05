@@ -130,8 +130,6 @@ def is_rare_pokemon(pokemon):
     rarity = pokemon.get('rarity', '').lower()
     is_rare = rarity in ['legendary', 'mythical', 'ultra beast']
 
-    # Debug logging
-    print(f"DEBUG is_rare_pokemon: Pokemon {pokemon.get('name')}, rarity '{rarity}', is_rare: {is_rare}")
 
     return is_rare
 
