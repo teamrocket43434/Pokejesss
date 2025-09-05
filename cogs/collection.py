@@ -66,44 +66,6 @@ class CollectionPaginationView(discord.ui.View):
         else:
             await interaction.response.edit_message(content=result, view=None)
 
-class AFKView(discord.ui.View):
-    def __init__(self, user_id, guild_id, is_afk, cog):
-        super().__init__(timeout=300)  # 5 minutes timeout
-        self.user_id = user_id
-        self.guild_id = guild_id
-        self.cog = cog
-        self.update_button(is_afk)
-
-    def update_button(self, is_afk):
-        # Clear existing buttons
-        self.clear_items()
-
-        if is_afk:
-            button = discord.ui.Button(
-                label="Remove from AFK",
-                style=discord.ButtonStyle.danger,
-                emoji="🔔"
-            )
-        else:
-            button = discord.ui.Button(
-                label="Set as AFK",
-                style=discord.ButtonStyle.success,
-                emoji="😴"
-            )
-
-        button.callback = self.toggle_afk
-        self.add_item(button)
-
-    async def toggle_afk(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This button is not for you!", ephemeral=True)
-            return
-
-        message, is_afk = await self.cog.toggle_user_afk(self.user_id, self.guild_id)
-        self.update_button(is_afk)
-
-        await interaction.response.edit_message(content=message, view=self)
-
 class Collection(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -115,7 +77,7 @@ class Collection(commands.Cog):
         return getattr(__main__, 'db', None)
 
     async def get_collectors_for_pokemon(self, pokemon_name, guild_id):
-        """Get all users who have collected this Pokemon in the given guild (excluding AFK users)"""
+        """Get all users who have collected this Pokemon in the given guild (excluding collection AFK users)"""
         if self.db is None:
             return []
 
@@ -126,8 +88,8 @@ class Collection(commands.Cog):
         normalized_spawn_name = normalize_pokemon_name(pokemon_name).lower()
 
         try:
-            # Get AFK users for this guild
-            afk_users = await self.get_afk_users(guild_id)
+            # Get collection AFK users for this guild
+            collection_afk_users = await self.get_collection_afk_users(guild_id)
 
             # Find all collections in this guild
             collections = await self.db.collections.find({"guild_id": guild_id}).to_list(length=None)
@@ -135,8 +97,8 @@ class Collection(commands.Cog):
             for collection in collections:
                 user_id = collection['user_id']
 
-                # Skip AFK users
-                if user_id in afk_users:
+                # Skip collection AFK users
+                if user_id in collection_afk_users:
                     continue
 
                 user_pokemon = collection.get('pokemon', [])
@@ -170,7 +132,7 @@ class Collection(commands.Cog):
         return collectors
 
     async def get_shiny_hunters_for_pokemon(self, pokemon_name, guild_id):
-        """Get all users hunting this Pokemon in the given guild (excluding AFK users)"""
+        """Get all users hunting this Pokemon in the given guild, including shiny hunt AFK users with special formatting"""
         if self.db is None:
             return []
 
@@ -181,27 +143,26 @@ class Collection(commands.Cog):
         normalized_spawn_name = normalize_pokemon_name(pokemon_name).lower()
 
         try:
-            # Get AFK users for this guild
-            afk_users = await self.get_afk_users(guild_id)
+            # Get shiny hunt AFK users for this guild
+            shiny_hunt_afk_users = await self.get_shiny_hunt_afk_users(guild_id)
 
             # Find all shiny hunts in this guild
             shiny_hunts = await self.db.shiny_hunts.find({"guild_id": guild_id}).to_list(length=None)
 
             for hunt in shiny_hunts:
                 user_id = hunt['user_id']
-
-                # Skip AFK users
-                if user_id in afk_users:
-                    continue
-
                 hunting_pokemon = hunt.get('pokemon')
+
                 if hunting_pokemon:
                     # Normalize the hunting Pokemon name
                     normalized_hunting_name = normalize_pokemon_name(hunting_pokemon).lower()
 
-                    # If the normalized names match, this user should be pinged
+                    # If the normalized names match, this user should be mentioned
                     if normalized_hunting_name == normalized_spawn_name:
-                        hunters.append(user_id)
+                        if user_id in shiny_hunt_afk_users:
+                            hunters.append(f"{user_id}(AFK)")
+                        else:
+                            hunters.append(f"<@{user_id}>")
                         continue
 
                 # Also check if user is hunting the base form and this is a variant
@@ -212,7 +173,10 @@ class Collection(commands.Cog):
                         normalized_base_form = normalize_pokemon_name(base_form).lower()
                         normalized_hunting_name = normalize_pokemon_name(hunting_pokemon).lower()
                         if normalized_hunting_name == normalized_base_form:
-                            hunters.append(user_id)
+                            if user_id in shiny_hunt_afk_users:
+                                hunters.append(f"{user_id}(AFK)")
+                            else:
+                                hunters.append(f"<@{user_id}>")
 
         except Exception as e:
             print(f"Error getting shiny hunters: {e}")
@@ -220,13 +184,13 @@ class Collection(commands.Cog):
         return hunters
 
     async def get_rare_collectors(self, guild_id):
-        """Get all users who want rare pings (Legendary, Mythical, Ultra Beast) in the given guild (excluding AFK users)"""
+        """Get all users who want rare pings (Legendary, Mythical, Ultra Beast) in the given guild (excluding collection AFK users)"""
         if self.db is None:
             return []
 
         try:
-            # Get AFK users for this guild
-            afk_users = await self.get_afk_users(guild_id)
+            # Get collection AFK users for this guild
+            collection_afk_users = await self.get_collection_afk_users(guild_id)
 
             # Find all users with rare ping enabled in this guild
             rare_ping_users = await self.db.rare_pings.find({"guild_id": guild_id, "enabled": True}).to_list(length=None)
@@ -234,8 +198,8 @@ class Collection(commands.Cog):
             collectors = []
             for rare_ping_doc in rare_ping_users:
                 user_id = rare_ping_doc['user_id']
-                # Skip AFK users
-                if user_id not in afk_users:
+                # Skip collection AFK users
+                if user_id not in collection_afk_users:
                     collectors.append(user_id)
 
         except Exception as e:
@@ -263,29 +227,54 @@ class Collection(commands.Cog):
 
         return collectors
 
-    async def toggle_user_afk(self, user_id, guild_id):
-        """Toggle user's AFK status for a guild"""
+    async def toggle_user_collection_afk(self, user_id, guild_id):
+        """Toggle user's collection AFK status for a guild"""
         if self.db is None:
             return "Database not available", False
 
         try:
             # Check current status
-            current_afk = await self.db.afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+            current_afk = await self.db.collection_afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
 
             if current_afk and current_afk.get('afk', False):
-                # User is currently AFK, remove them
-                await self.db.afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
-                return "You are no longer AFK and will be pinged for Pokemon spawns.", False
+                # User is currently collection AFK, remove them
+                await self.db.collection_afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
+                return "Collection pings enabled. You will be pinged for Pokemon you have collected.", False
             else:
-                # User is not AFK, add them
-                await self.db.afk_users.update_one(
+                # User is not collection AFK, add them
+                await self.db.collection_afk_users.update_one(
                     {"user_id": user_id, "guild_id": guild_id},
                     {"$set": {"user_id": user_id, "guild_id": guild_id, "afk": True}},
                     upsert=True
                 )
-                return "You are now AFK and won't be pinged for Pokemon spawns.", True
+                return "Collection pings disabled. You won't be pinged for Pokemon you have collected.", True
         except Exception as e:
-            print(f"Error toggling AFK status: {e}")
+            print(f"Error toggling collection AFK status: {e}")
+            return f"Database error: {str(e)[:100]}", False
+
+    async def toggle_user_shiny_hunt_afk(self, user_id, guild_id):
+        """Toggle user's shiny hunt AFK status for a guild"""
+        if self.db is None:
+            return "Database not available", False
+
+        try:
+            # Check current status
+            current_afk = await self.db.shiny_hunt_afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+
+            if current_afk and current_afk.get('afk', False):
+                # User is currently shiny hunt AFK, remove them
+                await self.db.shiny_hunt_afk_users.delete_one({"user_id": user_id, "guild_id": guild_id})
+                return "Shiny hunt pings enabled. You will be pinged for Pokemon you're hunting.", False
+            else:
+                # User is not shiny hunt AFK, add them
+                await self.db.shiny_hunt_afk_users.update_one(
+                    {"user_id": user_id, "guild_id": guild_id},
+                    {"$set": {"user_id": user_id, "guild_id": guild_id, "afk": True}},
+                    upsert=True
+                )
+                return "Shiny hunt pings disabled. Your ID will be shown but you won't be pinged for Pokemon you're hunting.", True
+        except Exception as e:
+            print(f"Error toggling shiny hunt AFK status: {e}")
             return f"Database error: {str(e)[:100]}", False
 
     async def toggle_rare_ping(self, user_id, guild_id):
@@ -316,28 +305,52 @@ class Collection(commands.Cog):
             print(f"Error toggling rare ping status: {e}")
             return f"Database error: {str(e)[:100]}", False
 
-    async def get_afk_users(self, guild_id):
-        """Get list of AFK user IDs for a guild"""
+    async def get_collection_afk_users(self, guild_id):
+        """Get list of collection AFK user IDs for a guild"""
         if self.db is None:
             return []
 
         try:
-            afk_docs = await self.db.afk_users.find({"guild_id": guild_id, "afk": True}).to_list(length=None)
+            afk_docs = await self.db.collection_afk_users.find({"guild_id": guild_id, "afk": True}).to_list(length=None)
             return [doc['user_id'] for doc in afk_docs]
         except Exception as e:
-            print(f"Error getting AFK users: {e}")
+            print(f"Error getting collection AFK users: {e}")
             return []
 
-    async def is_user_afk(self, user_id, guild_id):
-        """Check if a user is AFK"""
+    async def get_shiny_hunt_afk_users(self, guild_id):
+        """Get list of shiny hunt AFK user IDs for a guild"""
+        if self.db is None:
+            return []
+
+        try:
+            afk_docs = await self.db.shiny_hunt_afk_users.find({"guild_id": guild_id, "afk": True}).to_list(length=None)
+            return [doc['user_id'] for doc in afk_docs]
+        except Exception as e:
+            print(f"Error getting shiny hunt AFK users: {e}")
+            return []
+
+    async def is_user_collection_afk(self, user_id, guild_id):
+        """Check if a user is collection AFK"""
         if self.db is None:
             return False
 
         try:
-            afk_doc = await self.db.afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+            afk_doc = await self.db.collection_afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
             return afk_doc and afk_doc.get('afk', False)
         except Exception as e:
-            print(f"Error checking AFK status: {e}")
+            print(f"Error checking collection AFK status: {e}")
+            return False
+
+    async def is_user_shiny_hunt_afk(self, user_id, guild_id):
+        """Check if a user is shiny hunt AFK"""
+        if self.db is None:
+            return False
+
+        try:
+            afk_doc = await self.db.shiny_hunt_afk_users.find_one({"user_id": user_id, "guild_id": guild_id})
+            return afk_doc and afk_doc.get('afk', False)
+        except Exception as e:
+            print(f"Error checking shiny hunt AFK status: {e}")
             return False
 
     async def is_rare_ping_enabled(self, user_id, guild_id):
@@ -599,19 +612,6 @@ class Collection(commands.Cog):
             print(f"Database error in list_user_collection: {e}")
             return f"Database error: {str(e)[:100]}"
 
-    @commands.command(name="afk")
-    async def afk_command(self, ctx):
-        """Toggle AFK status with interactive button"""
-        current_afk = await self.is_user_afk(ctx.author.id, ctx.guild.id)
-
-        if current_afk:
-            initial_message = "You are currently AFK and won't be pinged for Pokemon spawns."
-        else:
-            initial_message = "You are currently active and will be pinged for Pokemon spawns."
-
-        view = AFKView(ctx.author.id, ctx.guild.id, current_afk, self)
-        await ctx.reply(initial_message, view=view)
-
     @commands.command(name="rareping")
     async def rare_ping_command(self, ctx):
         """Toggle rare ping status for Legendary, Mythical, and Ultra Beast Pokemon"""
@@ -629,7 +629,7 @@ class Collection(commands.Cog):
 
         # Parse arguments
         args = args.strip().lower()
-        
+
         if args in ["clear", "none"]:
             # Clear hunt
             result = await self.clear_shiny_hunt(ctx.author.id, ctx.guild.id)
@@ -638,7 +638,7 @@ class Collection(commands.Cog):
 
         # Check if multiple Pokemon provided
         pokemon_names = [name.strip() for name in args.split(",") if name.strip()]
-        
+
         if len(pokemon_names) > 1:
             await ctx.reply("You can't hunt two Pokemon, only one!")
             return
