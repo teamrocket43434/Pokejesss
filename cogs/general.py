@@ -1,12 +1,13 @@
 import discord
 import time
+import asyncio
 from discord.ext import commands
 from utils import (
     load_pokemon_data,
     find_pokemon_by_name,
     format_pokemon_prediction,
     get_image_url_from_message,
-    is_rare_pokemon  # Import the is_rare_pokemon function
+    is_rare_pokemon
 )
 
 class AFKView(discord.ui.View):
@@ -64,19 +65,15 @@ class AFKView(discord.ui.View):
             await interaction.response.send_message("This button is not for you!", ephemeral=True)
             return
 
-        # Get collection cog to call the method
         collection_cog = self.cog.bot.get_cog('Collection')
         if not collection_cog:
             await interaction.response.send_message("Collection system not available", ephemeral=True)
             return
 
         message, new_collection_afk = await collection_cog.toggle_user_collection_afk(self.user_id, self.guild_id)
-
-        # Get current shiny hunt status
         current_shiny_hunt_afk = await collection_cog.is_user_shiny_hunt_afk(self.user_id, self.guild_id)
 
         self.update_buttons(new_collection_afk, current_shiny_hunt_afk)
-
         await interaction.response.edit_message(content=message, view=self)
 
     async def toggle_shiny_hunt_afk(self, interaction: discord.Interaction):
@@ -84,24 +81,24 @@ class AFKView(discord.ui.View):
             await interaction.response.send_message("This button is not for you!", ephemeral=True)
             return
 
-        # Get collection cog to call the method
         collection_cog = self.cog.bot.get_cog('Collection')
         if not collection_cog:
             await interaction.response.send_message("Collection system not available", ephemeral=True)
             return
 
         message, new_shiny_hunt_afk = await collection_cog.toggle_user_shiny_hunt_afk(self.user_id, self.guild_id)
-
-        # Get current collection status
         current_collection_afk = await collection_cog.is_user_collection_afk(self.user_id, self.guild_id)
 
         self.update_buttons(current_collection_afk, new_shiny_hunt_afk)
-
         await interaction.response.edit_message(content=message, view=self)
 
 class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # Cache for guild settings to reduce database queries
+        self._guild_settings_cache = {}
+        self._cache_timestamps = {}
+        self._cache_ttl = 300  # 5 minutes
 
     @property
     def db(self):
@@ -115,18 +112,41 @@ class General(commands.Cog):
         import __main__
         return getattr(__main__, 'predictor', None)
 
+    @property
+    def http_session(self):
+        """Get HTTP session from main module"""
+        import __main__
+        return getattr(__main__, 'http_session', None)
+
+    def _is_cache_valid(self, guild_id):
+        """Check if guild settings cache is still valid"""
+        if guild_id not in self._cache_timestamps:
+            return False
+        return time.time() - self._cache_timestamps[guild_id] < self._cache_ttl
+
     async def get_guild_ping_roles(self, guild_id):
-        """Get the rare and regional ping roles for a guild"""
+        """Get the rare and regional ping roles for a guild with caching"""
+        # Check cache first
+        if self._is_cache_valid(guild_id) and guild_id in self._guild_settings_cache:
+            cached_settings = self._guild_settings_cache[guild_id]
+            return cached_settings.get('rare_role_id'), cached_settings.get('regional_role_id')
+
         if self.db is None:
             return None, None
 
         try:
             guild_settings = await self.db.guild_settings.find_one({"guild_id": guild_id})
             if guild_settings:
+                # Update cache
+                self._guild_settings_cache[guild_id] = guild_settings
+                self._cache_timestamps[guild_id] = time.time()
                 return guild_settings.get('rare_role_id'), guild_settings.get('regional_role_id')
         except Exception as e:
             print(f"Error getting guild ping roles: {e}")
 
+        # Cache empty result to avoid repeated database queries
+        self._guild_settings_cache[guild_id] = {}
+        self._cache_timestamps[guild_id] = time.time()
         return None, None
 
     async def set_rare_role(self, guild_id, role_id):
@@ -140,6 +160,9 @@ class General(commands.Cog):
                 {"$set": {"rare_role_id": role_id}},
                 upsert=True
             )
+            # Invalidate cache
+            self._guild_settings_cache.pop(guild_id, None)
+            self._cache_timestamps.pop(guild_id, None)
             return "Rare role set successfully!"
         except Exception as e:
             print(f"Error setting rare role: {e}")
@@ -156,6 +179,9 @@ class General(commands.Cog):
                 {"$set": {"regional_role_id": role_id}},
                 upsert=True
             )
+            # Invalidate cache
+            self._guild_settings_cache.pop(guild_id, None)
+            self._cache_timestamps.pop(guild_id, None)
             return "Regional role set successfully!"
         except Exception as e:
             print(f"Error setting regional role: {e}")
@@ -174,11 +200,9 @@ class General(commands.Cog):
 
         rare_role_id, regional_role_id = await self.get_guild_ping_roles(guild_id)
 
-        # Use the is_rare_pokemon function to check if it should get rare ping
         if is_rare_pokemon(pokemon) and rare_role_id:
             return f"Rare Ping: <@&{rare_role_id}>"
 
-        # Check if it's regional (if you have regional Pokemon in your data)
         rarity = pokemon.get('rarity', '').lower()
         if rarity == "regional" and regional_role_id:
             return f"Regional Ping: <@&{regional_role_id}>"
@@ -193,11 +217,12 @@ class General(commands.Cog):
             await ctx.reply("Collection system not available")
             return
 
-        # Get current AFK statuses
-        current_collection_afk = await collection_cog.is_user_collection_afk(ctx.author.id, ctx.guild.id)
-        current_shiny_hunt_afk = await collection_cog.is_user_shiny_hunt_afk(ctx.author.id, ctx.guild.id)
+        # Get current AFK statuses concurrently
+        current_collection_afk, current_shiny_hunt_afk = await asyncio.gather(
+            collection_cog.is_user_collection_afk(ctx.author.id, ctx.guild.id),
+            collection_cog.is_user_shiny_hunt_afk(ctx.author.id, ctx.guild.id)
+        )
 
-        # Create status message
         collection_status = "OFF" if current_collection_afk else "ON"
         shiny_hunt_status = "OFF" if current_shiny_hunt_afk else "ON"
 
@@ -323,14 +348,56 @@ class General(commands.Cog):
 
         await sent_message.edit(content="", embed=embed)
 
+    async def _predict_pokemon(self, image_url, ctx):
+        """Helper method for Pokemon prediction with optimized async handling"""
+        if self.predictor is None:
+            return "Predictor not initialized, please try again later."
+
+        if self.http_session is None:
+            return "HTTP session not available."
+
+        try:
+            # Use async prediction
+            name, confidence = await self.predictor.predict(image_url, self.http_session)
+
+            if not name or not confidence:
+                return "Could not predict Pokemon from the provided image."
+
+            formatted_output = format_pokemon_prediction(name, confidence)
+
+            # Get ping information concurrently
+            collection_cog = self.bot.get_cog('Collection')
+            if collection_cog:
+                # Run database queries concurrently
+                hunters_task = collection_cog.get_shiny_hunters_for_pokemon(name, ctx.guild.id)
+                collectors_task = collection_cog.get_collectors_for_pokemon(name, ctx.guild.id)
+                ping_info_task = self.get_pokemon_ping_info(name, ctx.guild.id)
+
+                hunters, collectors, ping_info = await asyncio.gather(
+                    hunters_task, collectors_task, ping_info_task,
+                    return_exceptions=True
+                )
+
+                # Handle results safely
+                if isinstance(hunters, list) and hunters:
+                    formatted_output += f"\nShiny Hunters: {' '.join(hunters)}"
+
+                if isinstance(collectors, list) and collectors:
+                    collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
+                    formatted_output += f"\nCollectors: {collector_mentions}"
+
+                if isinstance(ping_info, str) and ping_info:
+                    formatted_output += f"\n{ping_info}"
+
+            return formatted_output
+
+        except Exception as e:
+            print(f"Prediction error: {e}")
+            return f"Error: {str(e)[:100]}"
+
     @commands.command(name="predict")
     async def predict_command(self, ctx, *, image_url: str = None):
         """Predict Pokemon from image URL or replied message"""
-        # Check if predictor is available
-        if self.predictor is None:
-            await ctx.reply("Predictor not initialized, please try again later.")
-            return
-
         # If no URL provided, check if replying to a message with image
         if not image_url and ctx.message.reference:
             try:
@@ -351,35 +418,8 @@ class General(commands.Cog):
             await ctx.reply("Please provide an image URL after m!predict or reply to a message with an image.")
             return
 
-        try:
-            name, confidence = self.predictor.predict(image_url)
-            if name and confidence:
-                formatted_output = format_pokemon_prediction(name, confidence)
-
-                # Get shiny hunters for this Pokemon
-                collection_cog = self.bot.get_cog('Collection')
-                if collection_cog:
-                    hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, ctx.guild.id)
-                    if hunters:
-                        formatted_output += f"\nShiny Hunters: {' '.join(hunters)}"
-
-                    # Get collectors for this Pokemon
-                    collectors = await collection_cog.get_collectors_for_pokemon(name, ctx.guild.id)
-                    if collectors:
-                        collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
-                        formatted_output += f"\nCollectors: {collector_mentions}"
-
-                # Get ping info for rare/regional Pokemon
-                ping_info = await self.get_pokemon_ping_info(name, ctx.guild.id)
-                if ping_info:
-                    formatted_output += f"\n{ping_info}"
-
-                await ctx.reply(formatted_output)
-            else:
-                await ctx.reply("Could not predict Pokemon from the provided image.")
-        except Exception as e:
-            print(f"Prediction error: {e}")
-            await ctx.reply(f"Error: {str(e)[:100]}")
+        result = await self._predict_pokemon(image_url, ctx)
+        await ctx.reply(result)
 
     @commands.command(name="rare-role")
     @commands.has_permissions(administrator=True)
@@ -411,7 +451,7 @@ class General(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Handle auto-detection of Poketwo spawns"""
+        """Handle auto-detection of Poketwo spawns with optimized processing"""
         # Don't respond to the bot's own messages
         if message.author == self.bot.user:
             return
@@ -435,33 +475,40 @@ class General(commands.Cog):
 
                         if image_url:
                             try:
-                                name, confidence = self.predictor.predict(image_url)
+                                # Use async prediction with confidence threshold
+                                name, confidence = await self.predictor.predict(image_url, self.http_session)
 
                                 if name and confidence:
-                                    # Add confidence threshold to avoid low-confidence predictions
+                                    # Parse confidence and check threshold
                                     confidence_str = str(confidence).rstrip('%')
                                     try:
                                         confidence_value = float(confidence_str)
                                         if confidence_value >= 70.0:  # Only show if confidence >= 70%
                                             formatted_output = format_pokemon_prediction(name, confidence)
 
-                                            # Get shiny hunters for this Pokemon using collection cog
+                                            # Get all ping information concurrently
                                             collection_cog = self.bot.get_cog('Collection')
                                             if collection_cog:
-                                                hunters = await collection_cog.get_shiny_hunters_for_pokemon(name, message.guild.id)
-                                                if hunters:
+                                                # Run all database queries concurrently for better performance
+                                                tasks = [
+                                                    collection_cog.get_shiny_hunters_for_pokemon(name, message.guild.id),
+                                                    collection_cog.get_collectors_for_pokemon(name, message.guild.id),
+                                                    self.get_pokemon_ping_info(name, message.guild.id)
+                                                ]
+
+                                                results = await asyncio.gather(*tasks, return_exceptions=True)
+                                                hunters, collectors, ping_info = results
+
+                                                # Handle results safely
+                                                if isinstance(hunters, list) and hunters:
                                                     formatted_output += f"\nShiny Hunters: {' '.join(hunters)}"
 
-                                                # Get collectors for this Pokemon
-                                                collectors = await collection_cog.get_collectors_for_pokemon(name, message.guild.id)
-                                                if collectors:
+                                                if isinstance(collectors, list) and collectors:
                                                     collector_mentions = " ".join([f"<@{user_id}>" for user_id in collectors])
                                                     formatted_output += f"\nCollectors: {collector_mentions}"
 
-                                            # Get ping info for rare/regional Pokemon
-                                            ping_info = await self.get_pokemon_ping_info(name, message.guild.id)
-                                            if ping_info:
-                                                formatted_output += f"\n{ping_info}"
+                                                if isinstance(ping_info, str) and ping_info:
+                                                    formatted_output += f"\n{ping_info}"
 
                                             await message.reply(formatted_output)
                                         else:
