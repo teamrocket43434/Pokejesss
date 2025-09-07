@@ -1,7 +1,7 @@
 {
-  "pokemon_1": {
-    "name": "Bulbasaur",
-    "image_url": "https://cdn.poketwo.net/images/1.png"
+  "pokemon_0": {
+    "name": "Missingno.",
+    "image_url": "https://cdn.poketwo.net/images/0.png"
   },
   "pokemon_2": {
     "name": "Ivysaur",
