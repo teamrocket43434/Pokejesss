@@ -5283,6 +5283,30 @@
     "name": "Gigantamax Low Key Toxtricity",
     "image_url": "https://cdn.poketwo.net/images/10220.png"
   },
+  "variant_869_Gigantamax_Vanilla_Cream_Berry_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Berry Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
+  "variant_869_10214Vanilla_Cream_Love_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Love Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
+  "variant_869_Gigantamax_Vanilla_Cream_Star_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Star Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
+  "variant_869_Gigantamax_Vanilla_Cream_Clover_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Clover Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
+  "variant_869_Gigantamax_Vanilla_Cream_Flower_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Flower Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
+  "variant_869_Gigantamax_Vanilla_Cream_Ribbon_Sweet_Alcremie": {
+    "name": "Gigantamax Vanilla Cream Ribbon Sweet Alcremie",
+    "image_url": "https://cdn.poketwo.net/images/10214.png"
+  },
   "variant_58_Hisuian": {
     "name": "Hisuian Growlithe",
     "image_url": "https://cdn.poketwo.net/images/10221.png"
