@@ -33,7 +33,7 @@ class Starboard(commands.Cog):
             return {}
 
     def find_pokemon_image_url(self, pokemon_name, is_shiny=False, gender=None, is_gigantamax=False):
-        """Find Pokemon image URL from the loaded data with gender and Gigantamax support"""
+        """Find Pokemon image URL from the loaded data with gender and Gigantamax supportz"""
         # Normalize the pokemon name for matching
         normalized_name = pokemon_name.strip().lower()
 
