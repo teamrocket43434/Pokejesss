@@ -221,8 +221,6 @@ class Starboard(commands.Cog):
             # Remove gender emoji from pokemon name if it's there
             pokemon_name = re.sub(r'<:unknown:\d+>', '', pokemon_name_with_gender).strip()
 
-        # Debug print to help troubleshoot
-        print(f"DEBUG: Parsed message - Pokemon: '{pokemon_name}', Gender: '{gender}', Full captured: '{pokemon_name_with_gender}'")
 
         # Check for shiny
         is_shiny = "These colors seem unusual... ✨" in message_content
