@@ -19,7 +19,7 @@ class Egg(commands.Cog):
     def load_pokemon_data(self):
         """Load Pokemon data from starboard.txt file"""
         try:
-            # Try to load from the same directory as the cog
+            # Try to load from the same directory as  the cog
             starboard_file = os.path.join(os.path.dirname(__file__), '..', 'starboard.txt')
             if not os.path.exists(starboard_file):
                 # Fallback to current directory
