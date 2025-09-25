@@ -5267,8 +5267,8 @@
     "name": "Gigantamax Duraludon",
     "image_url": "https://cdn.poketwo.net/images/10216.png"
   },
-  "variant_890_Eternamax_Eternatus": {
-    "name": "Eternamax Eternatus",
+  "variant_890_Gigantamax_Eternatus": {
+    "name": "Gigantamax Eternatus",
     "image_url": "https://cdn.poketwo.net/images/10217.png"
   },
   "variant_892_Gigantamax_Single_Strike_Urshifu": {
@@ -5287,7 +5287,7 @@
     "name": "Gigantamax Vanilla Cream Berry Sweet Alcremie",
     "image_url": "https://cdn.poketwo.net/images/10214.png"
   },
-  "variant_869_10214Vanilla_Cream_Love_Sweet_Alcremie": {
+  "variant_869_Gigantamax_Vanilla_Cream_Love_Sweet_Alcremie": {
     "name": "Gigantamax Vanilla Cream Love Sweet Alcremie",
     "image_url": "https://cdn.poketwo.net/images/10214.png"
   },
