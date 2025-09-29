@@ -417,7 +417,7 @@ class Starboard(commands.Cog):
 
             # Handle shiny MissingNo.
             if is_shiny:
-                embed.title = "✨ <:ShinyMissingno:1422092867895033887> Shiny MissingNo. Detected <:ShinyMissingno:1422092867895033887> ✨"
+                embed.title = "✨ Shiny MissingNo. Detected ✨"
             else:
                 embed.title = "<:missingno:1420713960465760357> MissingNo. Detected <:missingno:1420713960465760357>"
 
