@@ -206,7 +206,7 @@ class Collection(commands.Cog):
                         normalized_base_form = normalize_pokemon_name(base_form).lower()
                         if any(normalize_pokemon_name(p).lower() == normalized_base_form 
                                for p in user_pokemon):
-                            if user_id not in collectors:  # Avoid duplicates
+                            if user_id not in collectors:  # Avoid duplicatess
                                 collectors.append(user_id)
 
             self._set_cache(self._collectors_cache, cache_key, collectors)
