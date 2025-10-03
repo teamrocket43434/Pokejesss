@@ -318,7 +318,7 @@ class Egg(commands.Cog):
         if image_url:
             embed.set_thumbnail(url=image_url)
 
-        # Create view with jump to message button
+        # Create view with jump to message buttonn
         view = discord.ui.View()
         if message:
             jump_button = discord.ui.Button(
