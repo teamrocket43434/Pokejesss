@@ -19,7 +19,7 @@ class Egg(commands.Cog):
     def load_pokemon_data(self):
         """Load Pokemon data from starboard.txt file"""
         try:
-            # Try to load from the same directory as  the cog
+            # Try to load from the same directory as the cog
             starboard_file = os.path.join(os.path.dirname(__file__), '..', 'starboard.txt')
             if not os.path.exists(starboard_file):
                 # Fallback to current directory
@@ -135,14 +135,61 @@ class Egg(commands.Cog):
 
     def parse_poketwo_hatch_message(self, message_content, hatched_by_id=None):
         """Parse Poketwo egg hatch message to extract relevant information"""
-        # Pattern to match egg hatch messages with optional bold formatting and optional IV
-        hatch_pattern = r"Your <:egg_[^>]+> \*\*(.+?) Egg\*\* has hatched into a \*\*<:_:\d+> (✨ )?Level (\d+) (.+?)(?:<:[^:]+:\d+>)?(?:\s+\((\d+\.?\d*)%\))?\*\*"
+        
+        # Pattern for Gigantamax hatches (with or without shiny)
+        # Format: Your <egg> **Gigantamax Pokemon Egg** has hatched into a **<:_:id> (✨ )?Level X <:_:1242455099213877248> Gigantamax Pokemon<gender> (IV%)**
+        # Name is between <:_:1242455099213877248> and gender emoji
+        gigantamax_pattern = r"Your <:egg_[^>]+> \*\*(.+?) Egg\*\* has hatched into a \*\*<:_:\d+> (✨ )?Level (\d+) <:_:1242455099213877248> (.+?)(<:[^:]+:\d+>)\s*\((\d+\.?\d*)%\)\*\*"
+        
+        # Try Gigantamax pattern first
+        match = re.search(gigantamax_pattern, message_content)
+        
+        if match:
+            egg_pokemon = match.group(1).strip()
+            is_shiny = match.group(2) is not None  # ✨ indicates shiny
+            level = match.group(3)
+            pokemon_name = match.group(4).strip()  # Full name including "Gigantamax Pokemon"
+            gender_emoji = match.group(5)  # Gender emoji
+            iv_str = match.group(6)
+            
+            is_gigantamax = True
+            
+            # Extract gender from emoji
+            gender = None
+            if gender_emoji:
+                if 'male:' in gender_emoji and 'female' not in gender_emoji:
+                    gender = 'male'
+                elif 'female:' in gender_emoji:
+                    gender = 'female'
+                elif 'unknown:' in gender_emoji:
+                    gender = 'unknown'
+            
+            # Parse IV
+            iv = float(iv_str) if iv_str else "Hidden"
+            
+            print(f"DEBUG: Gigantamax hatch parsed - Full Name: '{pokemon_name}', Gender: '{gender}', Shiny: {is_shiny}, IV: {iv}")
+            
+            return {
+                'egg_pokemon': egg_pokemon,
+                'level': level,
+                'pokemon_name': pokemon_name,
+                'iv': iv,
+                'is_shiny': is_shiny,
+                'is_gigantamax': is_gigantamax,
+                'gender': gender,
+                'message_type': 'hatch',
+                'hatched_by_id': hatched_by_id
+            }
+        
+        # Pattern for regular hatches (non-Gigantamax)
+        # Format: Your <egg> **Pokemon Egg** has hatched into a **<:_:id> (✨ )?Level X Pokemon<gender> (IV%)?**
+        regular_pattern = r"Your <:egg_[^>]+> \*\*(.+?) Egg\*\* has hatched into a \*\*<:_:\d+> (✨ )?Level (\d+) (.+?)(?:\s+\((\d+\.?\d*)%\))?\*\*"
 
-        match = re.search(hatch_pattern, message_content)
+        match = re.search(regular_pattern, message_content)
         if not match:
             # Try pattern without bold formatting (fallback)
-            hatch_pattern_no_bold = r"Your <:egg_[^>]+> (.+?) Egg has hatched into a <:_:\d+> (✨ )?Level (\d+) (.+?)(?:<:[^:]+:\d+>)?(?:\s+\((\d+\.?\d*)%\))?"
-            match = re.search(hatch_pattern_no_bold, message_content)
+            regular_pattern_no_bold = r"Your <:egg_[^>]+> (.+?) Egg has hatched into a <:_:\d+> (✨ )?Level (\d+) (.+?)(?:\s+\((\d+\.?\d*)%\))?"
+            match = re.search(regular_pattern_no_bold, message_content)
 
         if not match:
             return None
@@ -178,10 +225,7 @@ class Egg(commands.Cog):
             pokemon_name = re.sub(r'<:unknown:\d+>', '', pokemon_name_with_gender).strip()
 
         # Debug print to help troubleshoot
-        print(f"DEBUG: Hatch parsed - Pokemon: '{pokemon_name}', Gender: '{gender}', Full captured: '{pokemon_name_with_gender}'")
-
-        # Check for gigantamax (in the hatched pokemon name)
-        is_gigantamax = pokemon_name.lower().startswith('gigantamax')
+        print(f"DEBUG: Regular hatch parsed - Pokemon: '{pokemon_name}', Gender: '{gender}', Full captured: '{pokemon_name_with_gender}'")
 
         return {
             'egg_pokemon': egg_pokemon,
@@ -189,7 +233,7 @@ class Egg(commands.Cog):
             'pokemon_name': pokemon_name,
             'iv': iv,
             'is_shiny': is_shiny,
-            'is_gigantamax': is_gigantamax,
+            'is_gigantamax': False,
             'gender': gender,
             'message_type': 'hatch',
             'hatched_by_id': hatched_by_id
