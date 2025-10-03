@@ -258,7 +258,7 @@ class Collection(commands.Cog):
                             hunters.append(f"<@{user_id}>")
                         continue
 
-                    # Check for variant matching
+                    # Check for variant matchings
                     target_pokemon = find_pokemon_by_name(pokemon_name, pokemon_data)
                     if target_pokemon and target_pokemon.get('is_variant'):
                         base_form = target_pokemon.get('variant_of')
