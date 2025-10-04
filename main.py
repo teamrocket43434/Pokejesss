@@ -9,10 +9,29 @@ from predict import Prediction
 TOKEN = os.getenv("DISCORD_TOKEN")
 MONGODB_URI = os.getenv("MONGODB_URI")
 
-# Bot setup with command prefix
+# Custom prefix function to handle case-insensitive prefixes and whitespace
+def get_prefix(bot, message):
+    prefixes = ['m!', 'M!']
+
+    # Check each prefix (case variations handled explicitly)
+    content_lower = message.content.lower()
+    for prefix in prefixes:
+        prefix_lower = prefix.lower()
+        if content_lower.startswith(prefix_lower):
+            # Return the prefix with original casing from message
+            return message.content[:len(prefix)]
+
+    return prefixes  # Fallback to original list
+
+# Bot setup with multiple command prefixes and case-insensitive commands
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='m!', intents=intents, help_command=None)
+bot = commands.Bot(
+    command_prefix=get_prefix,  # Use custom function for case-insensitive prefixes
+    intents=intents, 
+    help_command=None,
+    case_insensitive=True  # This makes all commands case-insensitive
+)
 
 # Global variables for database and predictor
 db_client = None
@@ -152,8 +171,8 @@ async def on_ready():
         await bot.load_extension('cogs.general')
         await bot.load_extension('cogs.collection')
         await bot.load_extension('cogs.starboard')
-        await bot.load_extension('cogs.egg')
         await bot.load_extension('cogs.unbox')
+        await bot.load_extension('cogs.egg')
         print("All cogs loaded successfully")
     except Exception as e:
         print(f"Error loading cogs: {e}")
