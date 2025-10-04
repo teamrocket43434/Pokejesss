@@ -169,6 +169,7 @@ async def on_ready():
     # Load cogs
     try:
         await bot.load_extension('cogs.general')
+        await bot.load_extension('cogs.help')
         await bot.load_extension('cogs.collection')
         await bot.load_extension('cogs.starboard')
         await bot.load_extension('cogs.unbox')
