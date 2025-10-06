@@ -166,6 +166,10 @@ async def on_ready():
 
     await asyncio.gather(*initialization_tasks, return_exceptions=True)
 
+    # CRITICAL: Make predictor and http_session accessible to cogs
+    bot.predictor = predictor
+    bot.http_session = http_session
+
     # Load cogs
     try:
         await bot.load_extension('cogs.general')
@@ -174,6 +178,7 @@ async def on_ready():
         await bot.load_extension('cogs.starboard')
         await bot.load_extension('cogs.unbox')
         await bot.load_extension('cogs.egg')
+        await bot.load_extension('cogs.messagecmd')  # Load the new message command cog
         print("All cogs loaded successfully")
     except Exception as e:
         print(f"Error loading cogs: {e}")
