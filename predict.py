@@ -12,7 +12,6 @@ from typing import Optional, Tuple
 SUBMODULE_PATH = os.path.dirname(os.path.realpath(__file__))  
 ONNX_PATH = os.path.join(SUBMODULE_PATH, "model/pokemon_cnn_v2.onnx")
 LABELS_PATH = os.path.join(SUBMODULE_PATH, "model/labels_v2.json")
-SAVE_PATH = os.path.join(SUBMODULE_PATH, "data/commands/pokemon/images")
 
 class PredictionCache:
     """Simple in-memory cache for predictions"""
@@ -60,10 +59,9 @@ class PredictionCache:
         self.timestamps[key] = time.time()
 
 class Prediction:
-    def __init__(self, onnx_path=ONNX_PATH, labels_path=LABELS_PATH, save_path=SAVE_PATH):
+    def __init__(self, onnx_path=ONNX_PATH, labels_path=LABELS_PATH):
         self.onnx_path = onnx_path
         self.labels_path = labels_path
-        self.save_path = save_path
         self.class_names = self.load_class_names()
         self.cache = PredictionCache()
 
@@ -85,24 +83,13 @@ class Prediction:
 
         print(f"ONNX session initialized with providers: {self.ort_session.get_providers()}")
 
-    def generate_labels_file_from_save_path(self):
-        if not os.path.exists(self.save_path):
-            raise FileNotFoundError(f"SAVE_PATH does not exist: {self.save_path}")
-
-        class_names = sorted([
-            d for d in os.listdir(self.save_path)
-            if os.path.isdir(os.path.join(self.save_path, d))
-        ])
-
-        os.makedirs(os.path.dirname(self.labels_path), exist_ok=True)
-        with open(self.labels_path, "w", encoding="utf-8") as f:
-            json.dump(class_names, f, indent=2)
-
-        return class_names
-
     def load_class_names(self):
+        """Load class names from labels_v2.json"""
         if not os.path.exists(self.labels_path):
-            return self.generate_labels_file_from_save_path()
+            raise FileNotFoundError(
+                f"Labels file not found: {self.labels_path}\n"
+                "Please ensure model/labels_v2.json exists in your project."
+            )
 
         with open(self.labels_path, "r", encoding="utf-8") as f:
             data = json.load(f)
