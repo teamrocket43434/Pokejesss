@@ -30,7 +30,7 @@ bot = commands.Bot(
     command_prefix=get_prefix,  # Use custom function for case-insensitive prefixes
     intents=intents, 
     help_command=None,
-    case_insensitive=True  # This makes all commands case-insensitive
+    case_insensitive=True  # This makes all  commands case-insensitive
 )
 
 # Global variables for database and predictor
