@@ -397,21 +397,22 @@ class General(commands.Cog):
 
                         if image_url:
                             try:
-                                # Use async prediction with confidence threshold
+                                # Use async prediction
                                 name, confidence = await self.predictor.predict(image_url, self.http_session)
 
                                 if name and confidence:
-                                    # Parse confidence and check threshold
+                                    # Parse confidence
                                     confidence_str = str(confidence).rstrip('%')
                                     try:
                                         confidence_value = float(confidence_str)
-                                        if confidence_value >= 70.0:  # Only show if confidence >= 70%
+
+                                        # Handle high confidence predictions (>= 40%)
+                                        if confidence_value >= 40.0:
                                             formatted_output = format_pokemon_prediction(name, confidence)
 
                                             # Get all ping information concurrently
                                             collection_cog = self.bot.get_cog('Collection')
                                             if collection_cog:
-                                                # Run all database queries concurrently for better performance
                                                 tasks = [
                                                     collection_cog.get_shiny_hunters_for_pokemon(name, message.guild.id),
                                                     collection_cog.get_collectors_for_pokemon(name, message.guild.id),
@@ -433,8 +434,26 @@ class General(commands.Cog):
                                                     formatted_output += f"\n{ping_info}"
 
                                             await message.reply(formatted_output)
+
+                                        # Handle low confidence predictions (< 70%) - Event Pokemon
                                         else:
-                                            print(f"Low confidence prediction skipped: {name} ({confidence})")
+                                            formatted_output = f"Event Pokemon: {confidence}"
+
+                                            # Get collectors who added "event" to their collection
+                                            collection_cog = self.bot.get_cog('Collection')
+                                            if collection_cog:
+                                                try:
+                                                    event_collectors = await collection_cog.get_collectors_for_pokemon("event", message.guild.id)
+
+                                                    if isinstance(event_collectors, list) and event_collectors:
+                                                        collector_mentions = " ".join([f"<@{user_id}>" for user_id in event_collectors])
+                                                        formatted_output += f"\nCollectors: {collector_mentions}"
+                                                except Exception as e:
+                                                    print(f"Error getting event collectors: {e}")
+
+                                            await message.reply(formatted_output)
+                                            print(f"Low confidence prediction sent: Event Pokemon ({confidence})")
+
                                     except ValueError:
                                         print(f"Could not parse confidence value: {confidence}")
                             except Exception as e:
