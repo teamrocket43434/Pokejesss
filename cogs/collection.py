@@ -499,6 +499,11 @@ class Collection(commands.Cog):
             if not name:
                 continue
 
+            # Special case for "event" Pokemon (low confidence spawns)
+            if name.lower() == "event":
+                added_pokemon.append("event")
+                continue
+
             pokemon = find_pokemon_by_name_flexible(name, pokemon_data)
 
             if pokemon and pokemon.get('name'):
