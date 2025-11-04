@@ -4483,6 +4483,26 @@
     "name": "Pecharunt",
     "image_url": "https://cdn.poketwo.net/images/1025.png"
   },
+  "pokemon_50254": {
+    "name": "Fazwear",
+    "image_url": "https://cdn.poketwo.net/images/50254.png"
+  },
+  "pokemon_50244": {
+    "name": "Cloubat",
+    "image_url": "https://cdn.poketwo.net/images/50244.png"
+  },
+  "pokemon_50245": {
+    "name": "Foombrella",
+    "image_url": "https://cdn.poketwo.net/images/50245.png"
+  },
+  "pokemon_50246": {
+    "name": "Muddy Goomy",
+    "image_url": "https://cdn.poketwo.net/images/50246.png"
+  },
+  "pokemon_50247": {
+    "name": "Raincoat Grafaiai",
+    "image_url": "https://cdn.poketwo.net/images/50247.png"
+  },
   "pokemon_65": {
     "name": "Alakazam",
     "image_url": "https://cdn.poketwo.net/images/65.png"
